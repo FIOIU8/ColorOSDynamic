@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eaf1ee">
+  <title>ColorOS Touch</title>
+  <script>
+    try {
+      const mode = localStorage.getItem("touch-ui-theme-mode") || "system";
+      const dark = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch { document.documentElement.dataset.theme = "light"; }
+  </script>
+  <link rel="stylesheet" href="https://mui.kernelsu.org/internal/colors.css">
+  <link rel="stylesheet" href="https://mui.kernelsu.org/internal/insets.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app-shell" class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="ColorOS Touch">
+        <span class="brand-mark" aria-hidden="true"><i></i><b></b></span>
+        <span class="brand-copy"><strong>COLOROS <em>TOUCH</em></strong><small data-i18n="brandCaption">触控采样率管理</small></span>
+      </a>
+      <div class="preferences">
+        <div class="preference-group" role="group" data-i18n-aria="languageLabel" aria-label="界面语言">
+          <button type="button" data-language-mode="system" data-i18n="systemShort">系统</button>
+          <button type="button" data-language-mode="zh">中</button>
+          <button type="button" data-language-mode="en">EN</button>
+        </div>
+        <div class="preference-group" role="group" data-i18n-aria="themeLabel" aria-label="界面主题">
+          <button type="button" data-theme-mode="system" data-i18n="systemShort">系统</button>
+          <button type="button" data-theme-mode="light" data-i18n="lightShort">浅色</button>
+          <button type="button" data-theme-mode="dark" data-i18n="darkShort">深色</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+
+    <section class="page active" id="page-home" data-page="home" aria-labelledby="home-title">
+      <div class="page-heading">
+        <div><p class="eyebrow" data-i18n="homeEyebrow">DEVICE / INPUT CONTROL</p><h1 id="home-title" data-i18n="homeTitle">首页</h1><p class="page-description" data-i18n="homeDescription">查看触控服务状态并快速调整常用操作。</p></div>
+        <span class="version-tag">v2.5.2</span>
+      </div>
+
+      <section class="engine-panel" aria-labelledby="engine-title">
+        <div class="engine-copy">
+          <p class="eyebrow" data-i18n="engineEyebrow">TOUCH ENGINE</p>
+          <h2 id="engine-title" data-i18n="engineTitle">动态触控调整</h2>
+          <p data-i18n="engineDescription">根据前台应用规则自动调整触控采样率。</p>
+          <div class="engine-state"><span id="enabled-state-dot" class="state-dot"></span><strong id="enabled-label">读取中</strong><span class="state-divider"></span><span id="status-description" data-i18n="loading">正在读取状态…</span></div>
+        </div>
+        <label class="switch" data-i18n-aria="toggleLabel" aria-label="启用触控自动调整">
+          <input id="enabled" type="checkbox" aria-labelledby="engine-title">
+          <span class="switch-track"></span>
+        </label>
+      </section>
+
+      <section class="status-grid" data-i18n-aria="statusGridLabel" aria-label="触控服务状态">
+        <article class="status-cell">
+          <span class="cell-label" data-i18n="serviceStatus">服务状态</span>
+          <strong id="service-status" class="status-value loading" aria-live="polite">读取中</strong>
+        </article>
+        <article class="status-cell app-status-cell">
+          <span class="cell-label" data-i18n="foregroundApp">前台应用</span>
+          <div class="app-summary">
+            <span id="foreground-icon" class="app-icon-placeholder" aria-hidden="true">A</span>
+            <span class="app-summary-copy"><strong id="foreground-name" data-i18n="unknownApp">暂未检测</strong><small id="foreground-package">—</small></span>
+          </div>
+        </article>
+        <article class="status-cell">
+          <span class="cell-label" data-i18n="appliedRate">当前采样率</span>
+          <strong class="rate-value"><span id="current-rate">—</span><small>Hz</small></strong>
+        </article>
+      </section>
+
+      <section class="quick-section" aria-labelledby="quick-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="quickEyebrow">QUICK ACTIONS</p><h2 id="quick-title" data-i18n="quickTitle">快捷操作</h2></div><button class="icon-button configure-shortcuts" type="button" data-goto="config" data-i18n-aria="configureShortcuts" aria-label="配置快捷操作" title="配置快捷操作"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a7.9 7.9 0 0 1-1.5.9l-.3 1.8h-2.8l-.3-1.8a7.9 7.9 0 0 1-1.5-.9l-1.7.7-1.4-2.4 1.4-1.1a7.8 7.8 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a7.9 7.9 0 0 1 1.5-.9l.3-1.8h2.8l.3 1.8a7.9 7.9 0 0 1 1.5.9l1.7-.7 1.4 2.4-1.4 1.1a7.8 7.8 0 0 1 0 1.8Z"/></svg></button></div>
+        <div id="quick-actions" class="quick-actions"></div>
+      </section>
+
+      <section class="quick-config" aria-labelledby="quick-config-title">
+        <div><p class="eyebrow" data-i18n="quickConfigEyebrow">QUICK CONFIG</p><h2 id="quick-config-title" data-i18n="globalRateTitle">全局采样率</h2><p data-i18n="quickConfigHint">应用规则仍优先于全局值。</p></div>
+        <label class="field compact-field"><span class="visually-hidden" data-i18n="globalRateLabel">全局触控采样率</span><select id="home-global-rate" data-i18n-aria="globalRateLabel" aria-label="全局触控采样率"></select></label>
+      </section>
+      <p class="page-footnote" data-i18n="homeFootnote">配置更改保存后生效；硬件当前值由系统或后续规则决定。</p>
+    </section>
+
+    <section class="page" id="page-config" data-page="config" aria-labelledby="config-title" hidden>
+      <div class="page-heading">
+        <div><p class="eyebrow" data-i18n="configEyebrow">PROFILES / COMMANDS</p><h1 id="config-title" data-i18n="configTitle">配置</h1><p class="page-description" data-i18n="configDescription">设置全局采样率、应用规则、命令映射和快捷操作。</p></div>
+      </div>
+
+      <section class="config-section" aria-labelledby="config-global-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="baselineEyebrow">BASELINE / ALL APPS</p><h2 id="config-global-title" data-i18n="globalRateTitle">全局采样率</h2><p class="section-description" data-i18n="globalHint">未命中应用规则时采用此值。</p></div><span class="rate-readout"><strong id="global-rate-value">125</strong><small>Hz</small></span></div>
+        <label class="field"><span data-i18n="globalRateLabel">全局触控采样率</span><select id="global-rate"></select></label>
+      </section>
+
+      <section class="config-section" aria-labelledby="rules-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="rulesEyebrow">PER-APP / PRIORITY RULES</p><h2 id="rules-title" class="section-title"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span data-i18n="rulesTitle">应用规则</span></h2><p class="section-description" data-i18n="rulesHint">应用名称和图标仅用于展示，规则文件仍保存包名与采样率。</p></div><span id="app-count" class="count-badge">0</span></div>
+        <div class="rule-columns" aria-hidden="true"><span data-i18n="appColumn">应用</span><span data-i18n="rateColumn">采样率</span><span></span></div>
+        <div id="game-rules" class="rule-list"></div>
+        <form id="add-rule-form" class="add-rule-form">
+          <label class="field package-field"><span data-i18n="packageLabel">应用包名</span><input id="new-package" type="text" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="255" data-i18n-placeholder="packagePlaceholder" placeholder="com.example.app"></label>
+          <label class="field rate-field"><span data-i18n="newRuleRateLabel">采样率</span><select id="new-rate"></select></label>
+          <button class="button secondary add-button" type="submit"><span class="plus-mark" aria-hidden="true">+</span><span data-i18n="addAppButton">添加应用</span></button>
+        </form>
+      </section>
+
+      <section class="config-section fallback-section" aria-labelledby="fallback-title">
+        <div class="section-heading"><div><p class="eyebrow">MONITOR / PER-APP FALLBACK</p><h2 id="fallback-title" class="section-title"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h11a5 5 0 0 1 0 10H8M8 13l-4 4 4 4M8 3 4 7l4 4"/></svg><span data-i18n="fallbackTitle">检测方式回退</span></h2><p class="section-description" data-i18n="fallbackHint">指定应用进入前台时切换检测方式；离开后恢复 Activity 事件监听。名单只影响检测方式，不改变应用采样率规则。</p></div></div>
+        <label class="fallback-toggle-row"><span data-i18n="fallbackToggle">启用应用检测回退</span><span class="switch"><input id="fallback-enabled" type="checkbox"><span class="switch-track"></span></span></label>
+        <div class="fallback-controls">
+          <label class="field"><span data-i18n="fallbackMethodLabel">回退方式</span><select id="fallback-method"><option value="observer" data-i18n="fallbackMethodObserver">系统前台进程观察</option><option value="polling" data-i18n="fallbackMethodPolling">定时轮询</option></select></label>
+          <label class="field"><span data-i18n="fallbackIntervalLabel">轮询间隔（秒）</span><input id="fallback-interval" type="number" min="1" max="60" step="1" value="3" inputmode="numeric"></label>
+        </div>
+        <div class="fallback-list-heading"><strong data-i18n="fallbackPackagesLabel">回退名单应用</strong></div>
+        <div id="fallback-packages" class="fallback-packages"></div>
+        <form id="add-fallback-form" class="fallback-form">
+          <label class="field"><span data-i18n="packageLabel">应用包名</span><input id="fallback-package" type="text" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="255" data-i18n-placeholder="fallbackPackagePlaceholder" placeholder="com.example.game"></label>
+          <button class="button secondary add-button" type="submit"><span class="plus-mark" aria-hidden="true">+</span><span data-i18n="fallbackAddButton">添加到名单</span></button>
+        </form>
+      </section>
+
+      <section class="config-section" aria-labelledby="shortcuts-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="shortcutSettingsEyebrow">HOME / QUICK ACTIONS</p><h2 id="shortcuts-title" data-i18n="shortcutSettingsTitle">快捷操作设置</h2><p class="section-description" data-i18n="shortcutSettingsHint">选择首页三个操作槽执行的动作。</p></div></div>
+        <div id="shortcut-settings" class="shortcut-settings"></div>
+      </section>
+
+      <details class="config-section command-section" open>
+        <summary><span><p class="eyebrow" data-i18n="commandsEyebrow">ADVANCED / COMMAND MAP</p><strong class="section-title"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span data-i18n="commandsTitle">采样率命令映射</span></strong></span><span class="summary-mark" aria-hidden="true">⌄</span></summary>
+        <div class="command-content"><p class="section-description" data-i18n="commandsHint">仅支持安全格式的 touchHidlTest 命令。修改后保存并重启服务以应用。</p>
+          <form id="rate-form" class="rate-form">
+            <label class="field"><span data-i18n="rateIdLabel">采样率编号</span><input id="rate-id" type="number" min="1" max="9999" step="1" required></label>
+            <label class="field command-field"><span data-i18n="commandLabel">触控命令</span><input id="rate-command" type="text" spellcheck="false" required data-i18n-placeholder="commandPlaceholder" placeholder="touchHidlTest -c wo 0 26 12c"></label>
+            <button class="button secondary" type="submit" data-i18n="addMappingButton">添加映射</button>
+          </form>
+          <ul id="rate-list" class="rate-list"></ul>
+        </div>
+      </details>
+    </section>
+
+    <section class="page" id="page-about" data-page="about" aria-labelledby="about-title" hidden>
+      <div class="page-heading"><div><p class="eyebrow" data-i18n="aboutEyebrow">MODULE / DIAGNOSTICS</p><h1 id="about-title" data-i18n="aboutTitle">关于</h1><p class="page-description" data-i18n="aboutDescription">模块参数、设备信息和服务运行日志。</p></div></div>
+      <section class="config-section" aria-labelledby="params-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="paramsEyebrow">MODULE INFORMATION</p><h2 id="params-title" data-i18n="paramsTitle">模块参数</h2></div></div>
+        <dl class="parameter-list"><div><dt data-i18n="moduleVersion">模块版本</dt><dd>2.5.2</dd></div><div><dt data-i18n="managerLabel">Root 管理器</dt><dd id="manager-name">—</dd></div><div><dt data-i18n="deviceLabel">设备</dt><dd id="device-info">—</dd></div><div><dt data-i18n="androidLabel">Android 版本</dt><dd id="android-version">—</dd></div><div><dt data-i18n="eventModeLabel">前台检测方式</dt><dd id="event-mode">—</dd></div><div><dt data-i18n="heartbeatLabel">最近心跳</dt><dd id="heartbeat-time">—</dd></div></dl>
+      </section>
+      <section class="config-section log-section" aria-labelledby="log-title">
+        <div class="section-heading"><div><p class="eyebrow" data-i18n="logsEyebrow">SERVICE / LAST 100 LINES</p><h2 id="log-title" data-i18n="logsTitle">运行日志</h2><p class="section-description" data-i18n="logsHint">记录应用切换、规则命中和触控命令结果。</p></div><button id="refresh-log" class="icon-button" type="button" data-i18n-aria="refreshLabel" aria-label="刷新日志" title="刷新日志"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"/></svg></button></div>
+        <pre id="log-output" aria-live="polite" data-i18n="emptyLog">暂无日志</pre>
+      </section>
+    </section>
+
+    <div id="save-bar" class="save-bar" hidden><span class="save-state"><i class="save-dot"></i><span data-i18n="unsavedState">有未保存的更改</span></span><button id="save-settings" class="button primary" type="button"><span data-i18n="saveButton">保存更改</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+  </main>
+
+  <nav class="bottom-nav" data-i18n-aria="mainNavigation" aria-label="底部导航">
+    <button type="button" class="nav-item active" data-goto="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span data-i18n="navHome">首页</span></button>
+    <button type="button" class="nav-item" data-goto="config"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg><span data-i18n="navConfig">配置</span></button>
+    <button type="button" class="nav-item" data-goto="about"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span data-i18n="navAbout">关于</span></button>
+  </nav>
+
+  <dialog id="unsaved-dialog" class="unsaved-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-copy">
+    <form method="dialog" class="dialog-content">
+      <span class="dialog-mark" aria-hidden="true">!</span><h2 id="dialog-title" data-i18n="dialogTitle">有未保存的修改</h2><p id="dialog-copy" data-i18n="dialogCopy">离开前要如何处理这些更改？</p>
+      <div class="dialog-actions"><button id="dialog-save" class="button primary" type="button" data-i18n="dialogSave">保存</button><button id="dialog-discard" class="button secondary" type="button" data-i18n="dialogDiscard">放弃</button><button id="dialog-continue" class="button quiet" type="button" data-i18n="dialogContinue">继续编辑</button></div>
+    </form>
+  </dialog>
+  <script src="script.js"></script>
+</body>
+</html>

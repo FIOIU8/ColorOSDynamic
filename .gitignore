@@ -1,0 +1,16 @@
+# Local AI tool state and memory
+.claude/
+.zcode/
+.workboddy/
+.workbuddy/
+.cchaha/
+.codex/
+
+# Operating system metadata
+Thumbs.db
+.DS_Store
+
+# Local research notes and generated release packages
+/docs/
+*.[zZ][iI][pP]
+/dist/

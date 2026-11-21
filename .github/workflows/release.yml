@@ -1,0 +1,52 @@
+name: Draft module release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: draft-module-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check module scripts
+        run: |
+          for script in _unpacked/*.sh; do sh -n "$script"; done
+          node tools/test_rate_layout.js
+
+      - name: Build and verify installable ZIP
+        id: package
+        run: bash tools/package_module.sh "$GITHUB_SHA"
+
+      - name: Create draft release with ZIP
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.package.outputs.tag }}
+          ASSET: ${{ steps.package.outputs.asset }}
+        run: |
+          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          tags=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" \
+            --jq ".[] | select(.ref == \"refs/tags/$TAG\") | .ref")
+          if [[ -n $releases || -n $tags ]]; then
+            echo "::error::Release or tag $TAG already exists. Review the existing release or bump module.prop before running again."
+            exit 1
+          fi
+
+          release_url=$(gh release create "$TAG" "$ASSET" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+            --title "ColorOSDynamic $TAG" \
+            --notes "Install \`$(basename "$ASSET")\` from Assets in your module manager. Do not install GitHub's Source code ZIP.")
+          printf 'Draft release: %s\n\nInstaller: \`%s\`\n' "$release_url" "$(basename "$ASSET")" >> "$GITHUB_STEP_SUMMARY"
