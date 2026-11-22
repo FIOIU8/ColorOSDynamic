@@ -1,0 +1,9 @@
+[package]
+name = "touch-listener"
+version = "2.6.1"
+edition = "2021"
+
+[profile.release]
+strip = true
+lto = true
+panic = "abort"

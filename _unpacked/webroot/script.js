@@ -1,1288 +1,730 @@
-(() => {
-  const MODULE_DIR = "/data/adb/modules/ColorOSDynamic";
-  const CONFIG_PATH = `${MODULE_DIR}/touch_opt.conf`;
-  const RATE_PATH = `${MODULE_DIR}/rate_code.conf`;
-  const MONITOR_CONFIG_PATH = `${MODULE_DIR}/monitor_config.conf`;
-  const APP_NAMES_PATH = `${MODULE_DIR}/app_names.conf`;
-  const FLAG_PATH = `${MODULE_DIR}/touch_enabled.flag`;
-  const STATUS_PATH = "/data/adb/ColorOSDynamic/service.status";
-  const PID_PATH = "/data/adb/ColorOSDynamic/service.pid";
-  const WATCHDOG_PID_PATH = "/data/adb/ColorOSDynamic/watchdog.pid";
-  const WATCHDOG_STATUS_PATH = "/data/adb/ColorOSDynamic/watchdog.status";
-  const STOP_PATH = "/data/adb/ColorOSDynamic/stop.flag";
-  const RESTART_PATH = "/data/adb/ColorOSDynamic/restart.flag";
-  const SERVICE_PATH = `${MODULE_DIR}/service.sh`;
-  // 进程识别同时匹配完整模块路径与「模块目录名 + service.sh」组合；
-  // 不按纯 service.sh 文件名匹配，避免误杀其他模块的进程。
-  const SERVICE_CMD_MATCH = `grep -Fq -e '${SERVICE_PATH}' -e 'ColorOSDynamic/service.sh'`;
-  const MAX_WRITE_COMMAND = 64 * 1024;
-  const PACKAGE_PATTERN = /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/;
-  const COMMAND_PATTERN = /^touchHidlTest -c wo \d{1,4} \d{1,4} [A-Za-z0-9]{1,8}$/;
-  const DEFAULT_RATES = [
-    ["125", "ratePowerSave"], ["240", "rateBalanced"], ["360", "rateResponsive"],
-    ["241", "rateCompatibility"], ["361", "rateCompatibility"], ["362", "rateCompatibility"], ["600", "rateSmooth"]
-  ];
-  const DEFAULT_SHORTCUTS = [
-    { action: "enable", rate: "360" },
-    { action: "disable", rate: "360" },
-    { action: "setGlobal", rate: "360" }
-  ];
-  const COPY = {
-    zh: {
-      documentTitle: "ColorOS Touch | 触控采样率", brandCaption: "触控采样率管理", mainNavigation: "底部导航",
-      statusGridLabel: "触控服务状态",
-      languageLabel: "界面语言", themeLabel: "界面主题", systemShort: "系统", lightShort: "浅色", darkShort: "深色",
-      homeEyebrow: "DEVICE / INPUT CONTROL", homeTitle: "首页", homeDescription: "查看触控服务状态并快速调整常用操作。",
-      engineEyebrow: "TOUCH ENGINE", engineTitle: "动态触控调整", engineDescription: "根据前台应用规则自动调整触控采样率。",
-      enabled: "已启用", disabled: "未启用", toggleLabel: "启用触控自动调整", serviceStatus: "服务状态",
-      foregroundApp: "前台应用", unknownApp: "暂未检测", appliedRate: "当前采样率", quickEyebrow: "QUICK ACTIONS",
-      quickTitle: "快捷操作", configureShortcuts: "配置快捷操作", quickConfigEyebrow: "QUICK CONFIG",
-      globalRateTitle: "全局采样率", quickConfigHint: "应用规则仍优先于全局值。", globalRateLabel: "全局触控采样率",
-      homeFootnote: "配置更改保存后生效；停止服务不会重置硬件当前值。",
-      configEyebrow: "PROFILES / COMMANDS", configTitle: "配置", configDescription: "设置采样率、应用规则、检测回退和快捷操作。",
-      baselineEyebrow: "BASELINE / ALL APPS", globalHint: "未命中应用规则时采用此值。",
-      rulesEyebrow: "PER-APP / PRIORITY RULES", rulesTitle: "应用规则",
-      rulesHint: "应用名称和图标仅用于展示，规则文件仍保存包名与采样率。", appColumn: "应用", rateColumn: "采样率",
-      packageLabel: "应用包名", packagePlaceholder: "com.example.app", newRuleRateLabel: "采样率", addAppButton: "添加应用",
-      removeRule: "删除规则", emptyRules: "还没有应用规则。添加包名，为特定应用设定采样率。",
-      fallbackTitle: "检测方式回退", fallbackHint: "名单应用进入前台时切换回退方式；离开后恢复 Activity 事件监听。系统观察器不可用时会按此间隔轮询。名单只影响检测方式，不改变采样率规则。",
-      fallbackToggle: "启用应用检测回退", fallbackMethodLabel: "回退方式", fallbackMethodObserver: "cmd activity 前台进程观察（设备支持时）",
-      fallbackMethodPolling: "定时轮询", fallbackIntervalLabel: "轮询间隔（秒）", fallbackPackagesLabel: "回退名单应用",
-      fallbackPackagePlaceholder: "com.example.game", fallbackAddButton: "添加到名单", fallbackNoApps: "尚未添加回退应用。",
-      fallbackRemove: "从回退名单移除", invalidFallbackInterval: "轮询间隔必须为 1 到 60 秒。",
-      duplicateFallbackPackage: "应用 {package} 已在回退名单中。", fallbackAppAdded: "已加入检测回退名单，请保存更改。",
-      fallbackAppRemoved: "已从检测回退名单移除，请保存更改。", fallbackActiveFor: "（回退：{app}）",
-      shortcutSettingsEyebrow: "HOME / QUICK ACTIONS", shortcutSettingsTitle: "快捷操作设置",
-      shortcutSettingsHint: "选择首页三个操作槽执行的动作。", shortcutSlot: "操作 {number}",
-      shortcutNone: "不显示", shortcutEnable: "启用自动触控调整", shortcutDisable: "停止自动调整",
-      shortcutSetGlobal: "设置全局触控采样率", shortcutRate: "目标采样率", actionEnable: "启用自动调整",
-      actionDisable: "停止自动调整", actionSetGlobal: "设置全局采样率：{rate} Hz", actionUnavailable: "配置快捷操作",
-      commandsEyebrow: "ADVANCED / COMMAND MAP", commandsTitle: "采样率命令映射",
-      commandsHint: "仅支持安全格式的 touchHidlTest 命令。修改后保存并重启服务以应用。",
-      rateIdLabel: "采样率编号", commandLabel: "触控命令", commandPlaceholder: "touchHidlTest -c wo 0 26 12c",
-      addMappingButton: "添加映射", removeMapping: "删除映射", mappingInUse: "此映射正在使用，请先修改相关采样率。",
-      aboutEyebrow: "MODULE / DIAGNOSTICS", aboutTitle: "关于", aboutDescription: "模块参数、设备信息和服务运行日志。",
-      paramsEyebrow: "MODULE INFORMATION", paramsTitle: "模块参数", moduleVersion: "模块版本",
-      managerLabel: "Root 管理器", deviceLabel: "设备", androidLabel: "Android 版本", eventModeLabel: "前台检测方式",
-      heartbeatLabel: "最近心跳", logsEyebrow: "SERVICE / LAST 100 LINES", logsTitle: "运行日志",
-      logsHint: "记录应用切换、规则命中和触控命令结果。", refreshLabel: "刷新日志", emptyLog: "暂无日志",
-      navHome: "首页", navConfig: "配置", navAbout: "关于", loading: "正在读取状态…",
-      statusUnavailable: "状态不可用", statusDisabled: "未启用", statusWaiting: "等待系统启动", statusStarting: "启动中",
-      statusRunning: "运行中", statusDegraded: "降级运行", statusError: "异常", engineUnavailable: "连接不可用",
-      engineStateOff: "服务未运行", engineStateWaiting: "等待系统启动完成", engineStateStarting: "服务正在启动",
-      engineStateRunning: "正在监听前台应用变化", engineStateDegraded: "服务降级运行，请查看运行日志",
-      engineStateError: "服务进程异常退出", engineStateUnavailable: "无法读取管理器状态",
-      eventModeEvents: "Activity 事件", eventModeObserver: "系统进程观察", eventModePolling: "定时轮询", eventModeStarting: "启动中", noHeartbeat: "暂无",
-      recentHeartbeat: "{seconds} 秒前", ratePowerSave: "省电", rateBalanced: "均衡", rateResponsive: "跟手",
-      rateCompatibility: "兼容", rateSmooth: "顺滑", appCount: "{count} 个应用", appCountOne: "1 个应用",
-      invalidPackage: "请输入有效的应用包名。", duplicatePackage: "应用 {package} 已存在。",
-      invalidGlobal: "请选择有效的全局采样率。", invalidRuleRate: "采样率 {rate} 没有命令映射。",
-      duplicatePackageSave: "应用包名重复：{package}。", invalidRateId: "采样率编号须为 1–9999。",
-      invalidCommand: "仅支持指定格式的 touchHidlTest 命令。", rateExists: "采样率 {rate} 已存在。",
-      settingsSaved: "触控设置已保存。", ruleAdded: "应用规则已添加，请保存更改。", ruleRemoved: "应用规则已移除，请保存更改。",
-      mappingAdded: "触控命令映射已添加，请保存更改。", mappingRemoved: "触控命令映射已移除，请保存更改。",
-      enabledMessage: "触控动态调整已开启。", disabledMessage: "触控动态调整已关闭。",
-      unsavedState: "有未保存的更改", saveButton: "保存更改", dialogTitle: "有未保存的修改",
-      dialogCopy: "离开前要如何处理这些更改？", dialogSave: "保存", dialogDiscard: "放弃", dialogContinue: "继续编辑",
-      serviceActionError: "操作失败：{error}", managerKsu: "KernelSU", managerMagisk: "Magisk", managerUnknown: "未知",
-      nameFallback: "应用 {package}", statusEngineOn: "自动调整已启用", statusEngineOff: "自动调整已关闭",
-      refreshFailed: "读取服务状态失败。", setGlobalDone: "全局采样率已更新。",
-      systemLanguage: "系统语言", systemTheme: "系统主题", appPackage: "包名 {package}",
-      savedButRestartFailed: "配置已保存，但服务重启失败：{error}。请重新保存或手动重启服务。",
-      configTooLarge: "配置内容超过 64 KB，请删减应用规则或命令映射后重试。",
-      duplicateRulesMerged: "检测到 {count} 个重复包名，保存后将合并为一条规则。",
-      shortcutRateInvalid: "采样率已失效，请重新配置此快捷操作。"
-    },
-    en: {
-      documentTitle: "ColorOS Touch | Touch sampling", brandCaption: "Touch sampling manager", mainNavigation: "Main navigation",
-      statusGridLabel: "Touch service status",
-      languageLabel: "Interface language", themeLabel: "Interface theme", systemShort: "System", lightShort: "Light", darkShort: "Dark",
-      homeEyebrow: "DEVICE / INPUT CONTROL", homeTitle: "Home", homeDescription: "Check service health and run common touch actions.",
-      engineEyebrow: "TOUCH ENGINE", engineTitle: "Dynamic touch control", engineDescription: "Adjust touch sampling for the foreground app.",
-      enabled: "Enabled", disabled: "Disabled", toggleLabel: "Enable automatic touch adjustment", serviceStatus: "Service status",
-      foregroundApp: "Foreground app", unknownApp: "Not detected", appliedRate: "Applied rate", quickEyebrow: "QUICK ACTIONS",
-      quickTitle: "Quick actions", configureShortcuts: "Configure quick actions", quickConfigEyebrow: "QUICK CONFIG",
-      globalRateTitle: "Global sampling rate", quickConfigHint: "App rules still take priority.", globalRateLabel: "Global touch sampling rate",
-      homeFootnote: "Saved settings take effect when applied. Stopping the service leaves the hardware rate unchanged.",
-      configEyebrow: "PROFILES / COMMANDS", configTitle: "Configuration", configDescription: "Set sampling rates, app rules, detection fallback, and shortcuts.",
-      baselineEyebrow: "BASELINE / ALL APPS", globalHint: "Used when no app rule matches.",
-      rulesEyebrow: "PER-APP / PRIORITY RULES", rulesTitle: "App rules",
-      rulesHint: "Names and icons are for display; rules still store package names and rates.", appColumn: "Application", rateColumn: "Rate",
-      packageLabel: "App package", packagePlaceholder: "com.example.app", newRuleRateLabel: "Sampling rate", addAppButton: "Add app",
-      removeRule: "Remove rule", emptyRules: "No app rules yet. Add a package name to set a rate for a specific app.",
-      fallbackTitle: "Detection fallback", fallbackHint: "Switch methods while a listed app is in the foreground, then restore Activity event monitoring after it leaves. If the system observer is unavailable, polling uses this interval. This does not change touch-rate rules.",
-      fallbackToggle: "Enable per-app detection fallback", fallbackMethodLabel: "Fallback method", fallbackMethodObserver: "cmd activity observer (if supported)",
-      fallbackMethodPolling: "Timed polling", fallbackIntervalLabel: "Polling interval (seconds)", fallbackPackagesLabel: "Fallback apps",
-      fallbackPackagePlaceholder: "com.example.game", fallbackAddButton: "Add to list", fallbackNoApps: "No fallback apps added.",
-      fallbackRemove: "Remove from fallback list", invalidFallbackInterval: "Polling interval must be from 1 to 60 seconds.",
-      duplicateFallbackPackage: "{package} is already in the fallback list.", fallbackAppAdded: "App added to the detection fallback list. Save your changes.",
-      fallbackAppRemoved: "App removed from the detection fallback list. Save your changes.", fallbackActiveFor: " (fallback: {app})",
-      shortcutSettingsEyebrow: "HOME / QUICK ACTIONS", shortcutSettingsTitle: "Quick action settings",
-      shortcutSettingsHint: "Choose the action for each of the three home shortcuts.", shortcutSlot: "Action {number}",
-      shortcutNone: "Hidden", shortcutEnable: "Enable automatic touch adjustment", shortcutDisable: "Stop automatic adjustment",
-      shortcutSetGlobal: "Set global touch sampling rate", shortcutRate: "Target rate", actionEnable: "Enable automatic adjustment",
-      actionDisable: "Stop automatic adjustment", actionSetGlobal: "Set global rate: {rate} Hz", actionUnavailable: "Configure quick actions",
-      commandsEyebrow: "ADVANCED / COMMAND MAP", commandsTitle: "Sampling rate command map",
-      commandsHint: "Only supported touchHidlTest command formats are accepted. Save and restart the service to apply changes.",
-      rateIdLabel: "Rate identifier", commandLabel: "Touch command", commandPlaceholder: "touchHidlTest -c wo 0 26 12c",
-      addMappingButton: "Add mapping", removeMapping: "Remove mapping", mappingInUse: "This mapping is in use. Change its references first.",
-      aboutEyebrow: "MODULE / DIAGNOSTICS", aboutTitle: "About", aboutDescription: "Module parameters, device details, and service logs.",
-      paramsEyebrow: "MODULE INFORMATION", paramsTitle: "Module parameters", moduleVersion: "Module version",
-      managerLabel: "Root manager", deviceLabel: "Device", androidLabel: "Android version", eventModeLabel: "Foreground detection",
-      heartbeatLabel: "Last heartbeat", logsEyebrow: "SERVICE / LAST 100 LINES", logsTitle: "Service log",
-      logsHint: "Foreground changes, matched rules, and touch command results.", refreshLabel: "Refresh logs", emptyLog: "No log entries yet",
-      navHome: "Home", navConfig: "Config", navAbout: "About", loading: "Loading status…",
-      statusUnavailable: "Unavailable", statusDisabled: "Not enabled", statusWaiting: "Waiting for system boot", statusStarting: "Starting",
-      statusRunning: "Running", statusDegraded: "Degraded", statusError: "Error", engineUnavailable: "Connection unavailable",
-      engineStateOff: "Service is stopped", engineStateWaiting: "Waiting for system startup to complete", engineStateStarting: "Service is starting",
-      engineStateRunning: "Monitoring foreground app changes", engineStateDegraded: "Service is degraded; check the run log",
-      engineStateError: "Service process exited unexpectedly", engineStateUnavailable: "Unable to read manager status",
-      eventModeEvents: "Activity events", eventModeObserver: "System process observer", eventModePolling: "Timed polling", eventModeStarting: "Starting", noHeartbeat: "None",
-      recentHeartbeat: "{seconds}s ago", ratePowerSave: "Power save", rateBalanced: "Balanced", rateResponsive: "Responsive",
-      rateCompatibility: "Compatibility", rateSmooth: "Smooth", appCount: "{count} apps", appCountOne: "1 app",
-      invalidPackage: "Enter a valid app package name.", duplicatePackage: "{package} is already in the rules.",
-      invalidGlobal: "Choose a valid global sampling rate.", invalidRuleRate: "Rate {rate} has no command mapping.",
-      duplicatePackageSave: "Duplicate app package: {package}.", invalidRateId: "Rate identifier must be between 1 and 9999.",
-      invalidCommand: "Only supported touchHidlTest command formats are accepted.", rateExists: "Rate {rate} already exists.",
-      settingsSaved: "Touch settings saved.", ruleAdded: "App rule added. Save your changes to apply it.", ruleRemoved: "App rule removed. Save your changes to apply it.",
-      mappingAdded: "Command mapping added. Save your changes to apply it.", mappingRemoved: "Command mapping removed. Save your changes to apply it.",
-      enabledMessage: "Dynamic touch control enabled.", disabledMessage: "Dynamic touch control stopped.",
-      unsavedState: "Unsaved changes", saveButton: "Save changes", dialogTitle: "Unsaved changes",
-      dialogCopy: "How should these changes be handled before leaving?", dialogSave: "Save", dialogDiscard: "Discard", dialogContinue: "Continue editing",
-      serviceActionError: "Action failed: {error}", managerKsu: "KernelSU", managerMagisk: "Magisk", managerUnknown: "Unknown",
-      nameFallback: "App {package}", statusEngineOn: "Automatic adjustment is enabled", statusEngineOff: "Automatic adjustment is stopped",
-      refreshFailed: "Unable to read service status.", setGlobalDone: "Global sampling rate updated.",
-      systemLanguage: "System language", systemTheme: "System theme", appPackage: "Package {package}",
-      savedButRestartFailed: "Settings saved, but the service restart failed: {error}. Save again or restart the service manually.",
-      configTooLarge: "Configuration exceeds 64 KB. Remove some app rules or command mappings and try again.",
-      duplicateRulesMerged: "Found {count} duplicate package names; they will be merged when saved.",
-      shortcutRateInvalid: "This sampling rate is no longer available. Reconfigure the shortcut."
+/* The profile editor preserves comments, blank lines, and existing entry positions. */
+function parseFields(text) {
+  const result = Object.create(null);
+  for (const line of text.split('\n')) {
+    const delimiter = line.indexOf('=');
+    if (delimiter > 0 && !line.trimStart().startsWith('#')) result[line.slice(0, delimiter)] = line.slice(delimiter + 1);
+  }
+  return result;
+}
+
+function rewriteEntries(text, entries) {
+  const missing = new Map(entries);
+  const lines = [];
+  const source = text ? text.split('\n') : [];
+  const last = new Map();
+  const keyFor = line => !line.trimStart().startsWith('#') && line.includes('=') ? line.split('=', 1)[0] : null;
+  source.forEach((line, index) => { const key = keyFor(line); if (key) last.set(key, index); });
+  source.forEach((line, index) => {
+    const key = keyFor(line);
+    if (!key) lines.push(line);
+    else if (last.get(key) === index && missing.has(key)) {
+      lines.push(`${key}=${missing.get(key)}`);
+      missing.delete(key);
     }
+  });
+  for (const [key, value] of missing) lines.push(`${key}=${value}`);
+  return lines.join('\n');
+}
+
+function parseProfile(text) {
+  const source = text.replace(/\r\n/g, '\n').replace(/\n$/, '');
+  const sections = Object.create(null);
+  const markers = [...source.matchAll(/^\[(rules|rates|monitor|names)\]$/gm)];
+  if (!source.startsWith('schema=1\n') || new Set(markers.map(match => match[1])).size !== 4) throw new Error('config_invalid');
+  markers.forEach((match, index) => {
+    const end = index + 1 < markers.length ? markers[index + 1].index - 1 : source.length;
+    sections[match[1]] = source.slice(match.index + match[0].length + 1, end);
+  });
+  const rules = parseFields(sections.rules);
+  const global = rules.global_sample_rate;
+  delete rules.global_sample_rate;
+  const monitor = parseFields(sections.monitor);
+  return {
+    global, rules: new Map(Object.entries(rules)), rates: sections.rates,
+    names: new Map(Object.entries(parseFields(sections.names))), sections,
+    fallback: monitor.fallback_enabled === '1', interval: monitor.poll_interval || '3',
+    watch: sections.monitor.split('\n').filter(line => line.startsWith('fallback_app=')).map(line => line.slice(13)).join('\n'),
+    backend: parseFields(source.slice(0, markers[0].index)).backend || 'shell',
+  };
+}
+
+function serializeProfile(draft) {
+  const rules = rewriteEntries(draft.sections.rules, [['global_sample_rate', draft.global], ...draft.rules]);
+  const names = rewriteEntries(draft.sections.names, draft.names);
+  const monitor = [
+    `fallback_enabled=${draft.fallback ? '1' : '0'}`, `poll_interval=${draft.interval}`, 'fallback_method=polling',
+    ...new Set(draft.watch.split('\n').map(line => line.trim()).filter(Boolean)),
+  ].map((line, index) => index < 3 ? line : `fallback_app=${line}`).join('\n');
+  return `schema=1\nbackend=${draft.backend}\n[rules]\n${rules}\n[rates]\n${draft.rates}\n[monitor]\n${monitor}\n[names]\n${names}\n`;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { parseFields, rewriteEntries, parseProfile, serializeProfile };
+
+if (typeof document !== 'undefined') (() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const path = '/data/adb/modules/ColorOSDynamic/service.sh';
+  const manager = window.ksu || window.magisk;
+  const preview = !manager?.exec;
+  const packagePattern = /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/;
+  const zh = {
+    overview:'概览', rules:'规则', diagnostics:'诊断', preferences:'界面设置', theme:'主题', language:'语言', system:'系统', light:'浅色', dark:'深色', done:'完成', nav:'主导航',
+    applied:'最近成功下发', enable:'启用触控优化', target:'目标档', global:'全局档', foreground:'前台应用', search:'搜索应用或包名', addRule:'新增规则', advanced:'高级设置',
+    mappings:'触控命令映射', fallback:'为指定应用加强校准', watchlist:'应用包名（每行一个）', interval:'校准间隔（秒）', backend:'监听后端', shortcuts:'概览快捷操作',
+    unsaved:'有未保存的修改', discard:'撤销', save:'保存', resync:'重新检测', refresh:'刷新状态', logs:'运行日志', loadLogs:'查看', copy:'复制', logEmpty:'日志按需读取',
+    newRule:'新增应用规则', packageName:'应用包名', cancel:'取消', add:'添加', leavePrompt:'离开此页前，保存或放弃修改。', remove:'移除', empty:'没有匹配的应用规则',
+    loading:'加载中', running:'运行中', paused:'息屏暂停', degraded:'降级运行', disabled:'已关闭', stopped:'服务未运行', starting:'启动中', stopping:'停止中', unknown:'未知',
+    events:'事件监听', watchlistMode:'名单轮询', recovery:'监听恢复中', screen:'屏幕', awake:'亮屏', asleep:'息屏', mode:'检测方式', updated:'最后更新', reason:'诊断信息', release:'版本类型', unofficial:'非正式版',
+    saved:'已保存', failed:'操作失败', config_invalid:'配置无效，请检查档位映射、包名和校准间隔', control_busy:'服务繁忙，请稍后重试', copied:'已复制', unavailable:'未找到日志',
+    calcRule:'编辑规则', none:'无', turnOn:'开启服务', turnOff:'关闭服务', setGlobal:'切换全局档', foreground_unknown:'无法确认前台应用', event_stream_lost:'事件流中断，正在重连', apply_failed:'触控命令失败或超时',
+    power_unknown:'无法确认屏幕状态', rust_unavailable:'此安装包或设备不支持 Rust 监听', rust_start_failed:'Rust 监听无法启动，正在重试', rust_failed:'Rust 监听启动失败，已切回 Shell', worker_exited:'工作进程已退出，正在重试',
+    restart:'重试启动', resyncSent:'已请求重新检测', restore_failed:'停用时未能恢复全局档', compatibility:'兼容档', readOnly:'读取配置失败，请刷新重试', preview:'浏览器预览',
+  };
+  const en = {
+    overview:'Overview', rules:'Rules', diagnostics:'Diagnostics', preferences:'Preferences', theme:'Theme', language:'Language', system:'System', light:'Light', dark:'Dark', done:'Done', nav:'Main navigation',
+    applied:'Last applied', enable:'Enable touch optimization', target:'Target', global:'Global', foreground:'Foreground app', search:'Search apps or packages', addRule:'Add rule', advanced:'Advanced',
+    mappings:'Touch command mappings', fallback:'Recheck selected apps more often', watchlist:'Package names, one per line', interval:'Recheck interval (seconds)', backend:'Listener backend', shortcuts:'Overview actions',
+    unsaved:'Unsaved changes', discard:'Discard', save:'Save', resync:'Detect again', refresh:'Refresh status', logs:'Service log', loadLogs:'View', copy:'Copy', logEmpty:'Load logs on demand',
+    newRule:'New app rule', packageName:'Package name', cancel:'Cancel', add:'Add', leavePrompt:'Save or discard your changes before leaving.', remove:'Remove', empty:'No matching rules',
+    loading:'Loading', running:'Running', paused:'Screen off', degraded:'Degraded', disabled:'Off', stopped:'Service stopped', starting:'Starting', stopping:'Stopping', unknown:'Unknown',
+    events:'Event stream', watchlistMode:'Watchlist polling', recovery:'Reconnecting', screen:'Screen', awake:'On', asleep:'Off', mode:'Detection', updated:'Last updated', reason:'Diagnostics', release:'Release', unofficial:'Unofficial',
+    saved:'Saved', failed:'Operation failed', config_invalid:'Invalid profile. Check rate mappings, package names, and interval.', control_busy:'Service is busy. Try again shortly.', copied:'Copied', unavailable:'No log entries',
+    calcRule:'Edit rules', none:'None', turnOn:'Enable service', turnOff:'Disable service', setGlobal:'Set global rate', foreground_unknown:'Foreground app could not be confirmed', event_stream_lost:'Event stream interrupted. Reconnecting.', apply_failed:'Touch command failed or timed out',
+    power_unknown:'Screen state could not be confirmed', rust_unavailable:'Rust is unavailable on this build or device', rust_start_failed:'Rust listener could not start. Retrying.', rust_failed:'Rust listener failed. Switched to Shell.', worker_exited:'Worker stopped. Retrying.',
+    restart:'Retry start', resyncSent:'Detection requested', restore_failed:'Could not restore the global setting on stop', compatibility:'Compatibility rate', readOnly:'Could not read profile. Refresh to retry.', preview:'Browser preview',
   };
 
-  const $ = (id) => document.getElementById(id);
-  const localRead = (key, fallback) => {
+  const readPref = (key, fallback) => {
     try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
   };
-  const localWrite = (key, value) => {
-    try { localStorage.setItem(key, value); } catch { /* WebView storage may be unavailable. */ }
+  const writePref = (key, value) => {
+    try { localStorage.setItem(key, value); } catch { /* Some managers disable storage. */ }
   };
-  const systemLanguage = () => /^zh(?:-|$)/i.test(navigator.language || "") ? "zh" : "en";
-  const mediaTheme = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  const state = {
-    languageMode: localRead("touch-ui-language-mode", "system"),
-    themeMode: localRead("touch-ui-theme-mode", "system"),
-    language: "zh", theme: "light", games: [], rates: new Map(), rateLayout: [], globalRate: "125",
-    fallbackEnabled: false, fallbackMethod: "observer", fallbackInterval: "3", fallbackPackages: [],
-    shortcuts: readShortcuts(), appInfo: new Map(), appNames: new Map(), service: {}, enabled: false,
-    loaded: false, unavailable: false, dirty: false, original: null, callbackId: 0,
-    polling: false, pollingSince: 0, messageTimer: 0, enabledAt: 0
-  };
-  if (!["system", "zh", "en"].includes(state.languageMode)) state.languageMode = "system";
-  if (!["system", "light", "dark"].includes(state.themeMode)) state.themeMode = "system";
-  let pendingAction = null;
-  let exitFallbackUsed = false;
+  const themeMedia = matchMedia('(prefers-color-scheme: dark)');
+  let locale = zh;
+  const t = key => locale[key] ?? key;
+  let profile, original, shortcuts, page = 'overview', timer, messageTimer;
+  let busy = false, statusJob, appJob, requestId = 0, rawLog = '';
+  let status = { state: 'loading' };
+  const packages = new Map();
+  const shortcutOptions = ['calcRule', 'resync', 'diagnostics', 'turnOn', 'turnOff', 'setGlobal', 'none'];
+  const sampleProfile = 'schema=1\nbackend=shell\n[rules]\nglobal_sample_rate=125\ncom.tencent.tmgp.sgame=360\ncom.netease.party=240\n[rates]\n125=touchHidlTest -c wo 0 26 0\n240=touchHidlTest -c wo 0 26 1\n360=touchHidlTest -c wo 0 26 12c\n[monitor]\nfallback_enabled=0\npoll_interval=3\n[names]\ncom.tencent.tmgp.sgame=王者荣耀\ncom.netease.party=蛋仔派对\n';
+  const sampleStatus = { enabled:'1', experimental:'1', state:'running', screen:'awake', foreground_package:'com.tencent.tmgp.sgame', rate:'360', target:'360', global:'125', backend:'shell', mode:'events' };
+  let previewProfile = sampleProfile;
+  function exec(op, payload) {
+    if (preview) {
+      if (op === 'config') return Promise.resolve(previewProfile);
+      if (op === 'status') return Promise.resolve(Object.entries(sampleStatus).map(pair => pair.join('=')).join('\n'));
+      if (op === 'enable' || op === 'disable') Object.assign(sampleStatus, { enabled: op === 'enable' ? '1' : '0', state: op === 'enable' ? 'running' : 'disabled' });
+      if (op === 'save') {
+        previewProfile = new TextDecoder().decode(Uint8Array.from(atob(payload), char => char.charCodeAt(0)));
+        sampleStatus.global = parseProfile(previewProfile).global;
+      }
+      if (op === 'apps') return Promise.resolve('package:com.tencent.tmgp.sgame\npackage:com.netease.party\npackage:com.example.app');
+      if (op === 'logs') return Promise.resolve('2026-11-21 14:32:09  rate=360 foreground=com.tencent.tmgp.sgame');
+      return Promise.resolve('');
+    }
+    const command = `/system/bin/sh '${path}' ${op}${payload ? ` '${payload}'` : ''}`;
+    return new Promise((resolve, reject) => {
+      let timeout;
+      const callback = `__colorosTouch${++requestId}`;
+      const finish = (error, result) => {
+        clearTimeout(timeout);
+        delete window[callback];
+        if (error) reject(error); else resolve(result || '');
+      };
+      window[callback] = (code, stdout, stderr) => finish(Number(code) === 0 ? null : new Error((stderr || '').trim() || 'failed'), stdout);
+      timeout = setTimeout(() => finish(new Error('failed')), 12000);
+      try {
+        if (window.ksu) window.ksu.exec(command, '{}', callback);
+        else window.magisk.exec(command, callback);
+      } catch (error) { finish(error); }
+    });
+  }
+
+  function encode(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+  function notify(key, error = false) {
+    const element = $('message');
+    element.textContent = locale[key] || (error ? t('failed') : key);
+    element.dataset.error = String(error);
+    element.hidden = false;
+    clearTimeout(messageTimer);
+    messageTimer = setTimeout(() => { element.hidden = true; }, 4500);
+  }
+  function rateLabel(value) { return value ? `${value} Hz` : '—'; }
+  function appName(value) { return profile?.names.get(value) || packages.get(value) || value; }
+  const dropdownMenu = $('dropdown-menu');
+  const dropdownOptions = $('dropdown-options');
+  const dropdowns = new WeakMap();
+  let activeDropdown;
+  let dropdownId = 0;
+
+  // Keep each select as the value source for the existing form and settings handlers.
+  function syncDropdown(select) {
+    if (typeof dropdownMenu.showModal !== 'function') return;
+    let field = dropdowns.get(select);
+    if (!field) {
+      const label = select.labels[0];
+      const trigger = document.createElement('button');
+      const value = document.createElement('span');
+      trigger.type = 'button';
+      trigger.className = 'dropdown-trigger';
+      trigger.id = select.id ? `${select.id}-trigger` : `dropdown-trigger-${++dropdownId}`;
+      trigger.setAttribute('aria-haspopup', 'dialog');
+      trigger.setAttribute('aria-controls', dropdownMenu.id);
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.append(value);
+      trigger.onclick = () => openDropdown(field);
+      trigger.onkeydown = event => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        openDropdown(field);
+      };
+      select.before(trigger);
+      select.hidden = true;
+      if (label) label.htmlFor = trigger.id;
+      field = { select, trigger, value, label };
+      dropdowns.set(select, field);
+    }
+    field.name = field.label?.textContent.trim() || select.getAttribute('aria-label');
+    field.value.textContent = select.selectedOptions[0]?.label || '—';
+    field.trigger.setAttribute('aria-label', field.name ? `${field.name}: ${field.value.textContent}` : field.value.textContent);
+    field.trigger.disabled = select.disabled || !Array.from(select.options).some(option => !option.disabled);
+  }
+
+  function positionDropdown() {
+    if (!activeDropdown) return;
+    const anchor = activeDropdown.trigger.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const x = viewport?.offsetLeft || 0;
+    const y = viewport?.offsetTop || 0;
+    const width = viewport?.width || document.documentElement.clientWidth;
+    const height = viewport?.height || document.documentElement.clientHeight;
+    const margin = 8;
+    const gap = 4;
+    if (!anchor.width || anchor.bottom <= y || anchor.top >= y + height) {
+      closeDropdown(false);
+      return;
+    }
+    const below = y + height - anchor.bottom - gap - margin;
+    const above = anchor.top - y - gap - margin;
+    const menuWidth = Math.min(Math.max(anchor.width, 208), width - 2 * margin);
+    dropdownMenu.style.width = `${menuWidth}px`;
+    const naturalHeight = dropdownOptions.offsetHeight + 12;
+    const opensAbove = below < naturalHeight && above > below;
+    const space = opensAbove ? above : below;
+    const menuHeight = Math.min(naturalHeight, space < 60 ? height - 2 * margin : space);
+    const top = opensAbove ? anchor.top - gap - menuHeight : anchor.bottom + gap;
+    dropdownMenu.style.maxHeight = `${menuHeight}px`;
+    dropdownMenu.style.top = `${Math.max(y + margin, Math.min(top, y + height - margin - menuHeight))}px`;
+    dropdownMenu.style.left = `${Math.max(x + margin, Math.min(anchor.right - menuWidth, x + width - margin - menuWidth))}px`;
+  }
+
+  function focusDropdownOption(option) {
+    dropdownOptions.querySelector('[tabindex="0"]')?.setAttribute('tabindex', '-1');
+    option.tabIndex = 0;
+    option.focus({ preventScroll: true });
+    const rect = option.getBoundingClientRect();
+    const bounds = dropdownMenu.getBoundingClientRect();
+    if (rect.top < bounds.top + 6) dropdownMenu.scrollTop -= bounds.top + 6 - rect.top;
+    else if (rect.bottom > bounds.bottom - 6) dropdownMenu.scrollTop += rect.bottom - bounds.bottom + 6;
+  }
+
+  function openDropdown(field) {
+    if (activeDropdown || field.trigger.disabled) return;
+    const { select, trigger, name } = field;
+    const items = Array.from(select.options, (option, index) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'dropdown-option';
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(index === select.selectedIndex));
+      item.tabIndex = -1;
+      item.disabled = option.disabled;
+      item.textContent = option.label;
+      item.onclick = () => {
+        closeDropdown();
+        if (select.selectedIndex === index) return;
+        select.selectedIndex = index;
+        syncDropdown(select);
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        if (!trigger.isConnected) $(trigger.id)?.focus({ preventScroll: true });
+      };
+      return item;
+    });
+    const initial = items.find(item => !item.disabled && item.getAttribute('aria-selected') === 'true')
+      || items.find(item => !item.disabled);
+    if (!initial) return;
+    const accessibleName = name || trigger.getAttribute('aria-label');
+    dropdownMenu.setAttribute('aria-label', accessibleName);
+    dropdownOptions.setAttribute('aria-label', accessibleName);
+    dropdownOptions.replaceChildren(...items);
+    activeDropdown = field;
+    trigger.setAttribute('aria-expanded', 'true');
+    initial.tabIndex = 0;
+    dropdownMenu.showModal();
+    positionDropdown();
+    if (activeDropdown) focusDropdownOption(initial);
+  }
+
+  function closeDropdown(restoreFocus = true) {
+    if (!activeDropdown) return;
+    const { trigger } = activeDropdown;
+    activeDropdown = null;
+    trigger.setAttribute('aria-expanded', 'false');
+    dropdownMenu.close();
+    if (restoreFocus && trigger.isConnected) trigger.focus({ preventScroll: true });
+  }
+
+  function bindDropdown() {
+    let typed = '';
+    let lastKeyTime = 0;
+    dropdownMenu.addEventListener('close', () => { typed = ''; });
+    dropdownMenu.addEventListener('cancel', event => {
+      event.preventDefault();
+      closeDropdown();
+    });
+    dropdownMenu.addEventListener('click', event => {
+      if (event.target !== dropdownMenu) return;
+      const bounds = dropdownMenu.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX >= bounds.right || event.clientY < bounds.top || event.clientY >= bounds.bottom) closeDropdown();
+    });
+    dropdownOptions.onkeydown = event => {
+      const items = Array.from(dropdownOptions.querySelectorAll('button:enabled'));
+      const index = items.indexOf(document.activeElement);
+      if (index < 0) return;
+      let next;
+      switch (event.key) {
+        case 'ArrowDown': next = items[Math.min(index + 1, items.length - 1)]; break;
+        case 'ArrowUp': next = items[Math.max(index - 1, 0)]; break;
+        case 'Home': next = items[0]; break;
+        case 'End': next = items[items.length - 1]; break;
+        default: {
+          if (event.key.length !== 1 || event.key === ' ' || event.altKey || event.ctrlKey || event.metaKey) return;
+          const key = event.key.toLocaleLowerCase();
+          const now = performance.now();
+          typed = now - lastKeyTime > 600 || typed === key ? key : typed + key;
+          lastKeyTime = now;
+          const start = index + (typed.length === 1 ? 1 : 0);
+          next = [...items.slice(start), ...items.slice(0, start)].find(item =>
+            item.textContent.toLocaleLowerCase().startsWith(typed));
+        }
+      }
+      event.preventDefault();
+      if (next) focusDropdownOption(next);
+    };
+    window.addEventListener('resize', positionDropdown);
+    window.addEventListener('scroll', positionDropdown);
+    window.visualViewport?.addEventListener('resize', positionDropdown);
+    window.visualViewport?.addEventListener('scroll', positionDropdown);
+  }
+
+  function options(element, selected) {
+    const rates = Object.keys(parseFields(profile.rates)).filter(value => /^[1-9]\d{0,3}$/.test(value));
+    if (selected && !rates.includes(selected)) rates.push(selected);
+    element.replaceChildren(...rates.map(rate => new Option(rateLabel(rate), rate)));
+    if (selected) element.value = selected;
+    if (element.parentElement) syncDropdown(element);
+  }
+  function translate() {
+    const language = $('language').value;
+    locale = (language === 'system' ? !/^zh\b/i.test(navigator.language) : language === 'en') ? en : zh;
+    document.documentElement.lang = locale === en ? 'en' : 'zh-CN';
+    const theme = $('theme').value;
+    const dark = theme === 'dark' || (theme === 'system' && themeMedia.matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.querySelector('meta[name="theme-color"]').content = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    for (const element of document.querySelectorAll('[data-i]')) element.textContent = t(element.dataset.i);
+    for (const element of document.querySelectorAll('[data-label]')) element.setAttribute('aria-label', t(element.dataset.label));
+    for (const id of ['theme', 'language', 'backend', 'global-rate', 'app-rate']) syncDropdown($(id));
+    $('search').placeholder = t('search');
+    if (rawLog) $('log-output').textContent = rawLog;
+    renderRules();
+    renderStatus();
+    renderShortcuts();
+  }
+  function dirty() {
+    return Boolean(profile && (serializeProfile(profile) !== original || JSON.stringify(shortcuts) !== originalShortcuts));
+  }
+  let originalShortcuts;
+  function updateDirty() {
+    $('save-bar').hidden = !dirty();
+    $('save').disabled = busy;
+  }
+  function renderRules() {
+    if (!profile) return;
+    $('rule-count').textContent = String(profile.rules.size);
+    options($('global-rate'), profile.global);
+    const search = $('search').value.trim().toLowerCase();
+    const rows = [];
+    for (const [pkg, rate] of profile.rules) {
+      const name = appName(pkg);
+      if (!`${name} ${pkg}`.toLowerCase().includes(search)) continue;
+      const row = document.createElement('div');
+      row.className = 'rule-row';
+      const label = document.createElement('div');
+      const title = document.createElement('span');
+      title.textContent = name;
+      label.append(title);
+      if (name !== pkg) {
+        const info = document.createElement('span');
+        info.className = 'mono';
+        info.textContent = pkg;
+        label.append(info);
+      }
+      const select = document.createElement('select');
+      select.setAttribute('aria-label', `${t('target')} ${name}`);
+      options(select, rate);
+      select.onchange = () => { profile.rules.set(pkg, select.value); updateDirty(); };
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'remove quiet';
+      remove.setAttribute('aria-label', `${t('remove')} ${name}`);
+      remove.textContent = '×';
+      remove.onclick = () => { profile.rules.delete(pkg); renderRules(); updateDirty(); };
+      row.append(label, select, remove);
+      syncDropdown(select);
+      rows.push(row);
+    }
+    if (!rows.length) {
+      const blank = document.createElement('p');
+      blank.className = 'empty';
+      blank.textContent = t('empty');
+      rows.push(blank);
+    }
+    $('rule-list').replaceChildren(...rows);
+    if (activeDropdown && !activeDropdown.trigger.isConnected) closeDropdown(false);
+  }
+  function renderProfile() {
+    if (!profile) return;
+    $('global-rate').disabled = false;
+    $('rates-text').value = profile.rates;
+    $('fallback-enabled').checked = profile.fallback;
+    $('fallback-items').value = profile.watch;
+    $('poll-interval').value = profile.interval;
+    $('backend').value = profile.backend;
+    syncDropdown($('backend'));
+    renderRules();
+    renderShortcuts();
+    updateDirty();
+  }
+  function renderStatus() {
+    const state = status.stopping === '1' ? 'stopping' : status.state || 'unknown';
+    $('state').textContent = t(state);
+    $('state').dataset.state = state;
+    $('enabled').checked = status.enabled === '1';
+    $('enabled').disabled = busy || status.enabled === undefined || state === 'stopping';
+    $('applied').textContent = status.rate || '—';
+    $('target').textContent = rateLabel(status.target);
+    $('global').textContent = rateLabel(status.global || (original && parseProfile(original).global));
+    const pkg = status.foreground_package;
+    const name = status.foreground_name || appName(pkg);
+    $('foreground').textContent = name || (status.screen === 'asleep' ? t('paused') : '—');
+    $('package').textContent = name && name !== pkg ? pkg || '' : '';
+    $('backend-row').hidden = status.experimental !== '1' && profile?.backend !== 'rust';
+    $('resync').disabled = busy || status.enabled !== '1';
+    const rows = [
+      ['state', t(state)], ['backend', status.backend || status.preferred_backend || '—'],
+      ['release', t('unofficial')],
+      ['mode', status.mode ? t(status.mode === 'watchlist' ? 'watchlistMode' : status.mode) : '—'],
+      ['screen', status.screen ? t(status.screen) : '—'],
+      ['updated', status.updated ? new Date(Number(status.updated) * 1000).toLocaleString(document.documentElement.lang) : '—'],
+      ['reason', [status.error, status.backend_error, preview ? 'preview' : ''].filter(Boolean).map(t).join(' · ') || '—'],
+    ];
+    $('details').replaceChildren(...rows.map(([key, value]) => {
+      const term = document.createElement('dt');
+      const definition = document.createElement('dd');
+      term.textContent = key === 'state' ? (locale === en ? 'Status' : '服务状态') : t(key);
+      definition.textContent = value;
+      const row = document.createElement('div');
+      row.append(term, definition);
+      return row;
+    }));
+  }
+  function renderShortcuts() {
+    if (!shortcuts) return;
+    const rates = parseFields(profile?.rates || '');
+    $('shortcuts').replaceChildren(...shortcuts.filter(slot => slot.action !== 'none').map(slot => {
+      const { action, rate } = slot;
+      const button = document.createElement('button');
+      button.textContent = action === 'setGlobal' ? `${t(action)} ${rateLabel(rate)}` : t(action);
+      button.disabled = action === 'setGlobal' && !rates[rate];
+      button.onclick = async () => {
+        if (action === 'resync') return runResync();
+        if (action === 'turnOn' || action === 'turnOff') return changeEnabled(action === 'turnOn');
+        if (action === 'setGlobal') {
+          if (!profile || busy || !(await allowLeave())) return;
+          const previous = profile.global;
+          profile.global = rate;
+          if (!(await save())) profile.global = previous;
+          renderProfile();
+          return;
+        }
+        return navigate(action === 'calcRule' ? 'rules' : 'diagnostics');
+      };
+      return button;
+    }));
+    $('shortcut-selects').replaceChildren(...shortcuts.map((slot, index) => {
+      const row = document.createElement('div');
+      const select = document.createElement('select');
+      select.id = `shortcut-action-${index}`;
+      select.setAttribute('aria-label', `${t('shortcuts')} ${index + 1}`);
+      select.replaceChildren(...shortcutOptions.map(value => new Option(t(value), value)));
+      select.value = slot.action;
+      select.onchange = () => { slot.action = select.value; updateDirty(); renderShortcuts(); };
+      row.append(select);
+      syncDropdown(select);
+      if (slot.action === 'setGlobal' && profile) {
+        const rateSelect = document.createElement('select');
+        rateSelect.id = `shortcut-rate-${index}`;
+        rateSelect.setAttribute('aria-label', `${t('global')} ${index + 1}`);
+        options(rateSelect, slot.rate);
+        rateSelect.onchange = () => { slot.rate = rateSelect.value; updateDirty(); renderShortcuts(); };
+        row.append(rateSelect);
+        syncDropdown(rateSelect);
+      }
+      return row;
+    }));
+    if (activeDropdown && !activeDropdown.trigger.isConnected) closeDropdown(false);
+  }
+  async function fetchProfile() {
+    try {
+      profile = parseProfile(await exec('config'));
+      original = serializeProfile(profile);
+      renderProfile();
+      renderStatus();
+      loadNames([...profile.rules.keys()]);
+    } catch { notify('readOnly', true); }
+  }
+  async function loadNames(ids) {
+    if (!window.ksu?.getPackagesInfo || !ids.length) return;
+    try {
+      for (let offset = 0; offset < ids.length; offset += 50) {
+        let info = await window.ksu.getPackagesInfo(JSON.stringify(ids.slice(offset, offset + 50)));
+        if (typeof info === 'string') info = JSON.parse(info);
+        if (!Array.isArray(info) && info && typeof info === 'object') info = Object.values(info);
+        if (Array.isArray(info)) for (const item of info) {
+          if (!item || typeof item !== 'object') continue;
+          const pkg = item.packageName || item.package_name || item.package || item.name;
+          const name = item.appLabel || item.label || item.appName || item.applicationLabel || item.title;
+          if (packagePattern.test(pkg) && typeof name === 'string') {
+            const cleaned = name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 95);
+            if (cleaned) packages.set(pkg, cleaned);
+          }
+        }
+      }
+      renderRules();
+      renderStatus();
+    } catch { /* Package labels are optional. */ }
+  }
+  async function loadApps() {
+    if (!appJob) appJob = exec('apps').then(async text => {
+      const ids = text.split('\n').map(line => line.replace(/^package:/, '').trim()).filter(pkg => packagePattern.test(pkg)).sort();
+      populateApps(ids);
+      await loadNames(ids);
+      populateApps(ids);
+    }).catch(() => { appJob = undefined; });
+    return appJob;
+  }
+  function populateApps(ids) {
+    $('installed-apps').replaceChildren(...ids.map(pkg => {
+      const option = document.createElement('option');
+      option.value = pkg;
+      if (appName(pkg) !== pkg) option.label = appName(pkg);
+      return option;
+    }));
+  }
+  function refreshStatus() {
+    if (statusJob) return statusJob;
+    statusJob = exec('status').then(text => {
+      status = parseFields(text);
+      renderStatus();
+    }).catch(() => notify('failed', true)).finally(() => { statusJob = undefined; schedule(); });
+    return statusJob;
+  }
+  function schedule() {
+    clearTimeout(timer);
+    if (page === 'overview' && !document.hidden && !busy && !statusJob) timer = setTimeout(refreshStatus, 15000);
+  }
+  function setBusy(value) { busy = value; renderStatus(); updateDirty(); schedule(); }
+  async function save() {
+    if (busy || !profile) return false;
+    setBusy(true);
+    try {
+      const snapshot = serializeProfile(profile);
+      const shortcutsSnapshot = JSON.stringify(shortcuts);
+      const payload = encode(snapshot);
+      if (payload.length > 60000) throw new Error('config_invalid');
+      if (snapshot !== original) await exec('save', payload);
+      original = snapshot;
+      originalShortcuts = shortcutsSnapshot;
+      writePref('touch-ui-shortcuts-v2', originalShortcuts);
+      await refreshStatus();
+      notify('saved');
+      return true;
+    } catch (error) {
+      notify(error.message || 'failed', true);
+      return false;
+    } finally { setBusy(false); }
+  }
+  function discard() {
+    if (!original) return;
+    profile = parseProfile(original);
+    shortcuts = JSON.parse(originalShortcuts);
+    renderProfile();
+  }
+  async function allowLeave() {
+    if (!dirty()) return true;
+    if (busy || $('confirm-dialog').open) return false;
+    const dialog = $('confirm-dialog');
+    dialog.returnValue = 'cancel';
+    const result = new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once:true }));
+    dialog.showModal();
+    switch (await result) {
+      case 'save': return save();
+      case 'discard': discard(); return true;
+      default: return false;
+    }
+  }
+  async function navigate(next) {
+    if (next === page || !(await allowLeave())) return;
+    page = next;
+    for (const tab of document.querySelectorAll('[data-page]')) {
+      const active = tab.dataset.page === page;
+      $(tab.dataset.page).hidden = !active;
+      if (active) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
+    }
+    window.scrollTo(0, 0);
+    schedule();
+    if (next !== 'rules') refreshStatus();
+  }
+  async function changeEnabled(wanted) {
+    if (busy || !(await allowLeave())) { renderStatus(); return; }
+    setBusy(true);
+    try { await exec(wanted ? 'enable' : 'disable'); await refreshStatus(); }
+    catch (error) { notify(error.message || 'failed', true); }
+    finally { setBusy(false); }
+  }
+  async function runResync() {
+    if (busy || status.enabled !== '1') return;
+    setBusy(true);
+    try { await exec('resync'); await refreshStatus(); notify('resyncSent'); }
+    catch (error) { notify(error.message || 'failed', true); }
+    finally { setBusy(false); }
+  }
+  function bindDraft(id, key, property = 'value') {
+    $(id).addEventListener('input', () => {
+      if (!profile) return;
+      profile[key] = $(id)[property];
+      if (id === 'rates-text') { renderRules(); renderShortcuts(); }
+      updateDirty();
+    });
+  }
+  function bind() {
+    bindDropdown();
+    for (const tab of document.querySelectorAll('[data-page]')) tab.onclick = () => navigate(tab.dataset.page);
+    bindDraft('global-rate', 'global');
+    bindDraft('rates-text', 'rates');
+    bindDraft('fallback-enabled', 'fallback', 'checked');
+    bindDraft('fallback-items', 'watch');
+    bindDraft('poll-interval', 'interval');
+    bindDraft('backend', 'backend');
+    $('search').oninput = renderRules;
+    $('save').onclick = save;
+    $('discard').onclick = discard;
+    $('enabled').onchange = () => changeEnabled($('enabled').checked);
+    $('resync').onclick = runResync;
+    $('refresh').onclick = () => { if (!profile) fetchProfile(); refreshStatus(); };
+    $('preferences').onclick = () => $('prefs-dialog').showModal();
+    $('add-rule').onclick = () => {
+      if (!profile) return;
+      $('app-input').value = '';
+      options($('app-rate'), profile.global);
+      $('rule-dialog').showModal();
+      loadApps();
+    };
+    $('cancel-rule').onclick = () => $('rule-dialog').close();
+    $('rule-form').onsubmit = event => {
+      event.preventDefault();
+      const pkg = $('app-input').value.trim();
+      if (!packagePattern.test(pkg) || !$('app-rate').value) return;
+      profile.rules.set(pkg, $('app-rate').value);
+      if (packages.get(pkg)) profile.names.set(pkg, packages.get(pkg));
+      $('rule-dialog').close();
+      renderRules();
+      updateDirty();
+    };
+    $('load-logs').onclick = async () => {
+      $('load-logs').disabled = true;
+      try {
+        rawLog = (await exec('logs')).trim();
+        $('log-output').textContent = rawLog || t('unavailable');
+        $('copy-logs').disabled = !rawLog;
+      } catch { notify('failed', true); }
+      finally { $('load-logs').disabled = false; }
+    };
+    $('copy-logs').onclick = async () => {
+      try { await navigator.clipboard.writeText(rawLog); notify('copied'); }
+      catch {
+        const range = document.createRange();
+        range.selectNodeContents($('log-output'));
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        if (document.execCommand('copy')) { selection.removeAllRanges(); notify('copied'); }
+      }
+    };
+    for (const preference of ['theme', 'language']) {
+      const key = `touch-ui-${preference}-mode`;
+      $(preference).value = readPref(key, 'system');
+      $(preference).onchange = () => { writePref(key, $(preference).value); translate(); };
+    }
+    themeMedia.addEventListener('change', translate);
+    window.addEventListener('languagechange', translate);
+    document.addEventListener('visibilitychange', () => { schedule(); if (!document.hidden) refreshStatus(); });
+    window.addEventListener('beforeunload', event => {
+      if (dirty()) { event.preventDefault(); event.returnValue = ''; }
+    });
+    history.replaceState({ colorosBase:true }, '');
+    history.pushState({ colorosGuard:true }, '');
+    window.addEventListener('popstate', async () => {
+      if (!history.state?.colorosBase) return;
+      history.pushState({ colorosGuard:true }, '');
+      if (activeDropdown) { closeDropdown(); return; }
+      if (page !== 'overview') { await navigate('overview'); return; }
+      if (!(await allowLeave())) return;
+      if (typeof manager?.exit === 'function') manager.exit();
+      else if (preview) history.go(-2);
+    });
+  }
 
   function readShortcuts() {
     try {
-      const parsed = JSON.parse(localStorage.getItem("touch-ui-shortcuts") || "null");
-      if (Array.isArray(parsed) && parsed.length === 3) {
-        return parsed.map((entry) => ({
-          action: ["", "enable", "disable", "setGlobal"].includes(entry.action) ? entry.action : "",
-          rate: /^\d{1,4}$/.test(String(entry.rate || "")) ? String(entry.rate) : "360"
-        }));
-      }
-    } catch { /* Use defaults for damaged or unavailable preferences. */ }
-    return DEFAULT_SHORTCUTS.map((item) => ({ ...item }));
-  }
-
-  function t(key, values = {}) {
-    let value = COPY[state.language][key] || COPY.zh[key] || key;
-    for (const [name, replacement] of Object.entries(values)) value = value.replaceAll(`{${name}}`, String(replacement));
-    return value;
-  }
-
-  function exec(command) {
-    return new Promise((resolve, reject) => {
-      const callback = `touch_webui_cb_${Date.now()}_${state.callbackId++}`;
-      const timeout = window.setTimeout(() => {
-        delete window[callback];
-        reject(new Error("Root command timed out"));
-      }, 8000);
-      window[callback] = (code, stdout, stderr) => {
-        window.clearTimeout(timeout);
-        delete window[callback];
-        if (Number(code) !== 0) reject(new Error((stderr || stdout || `Command failed (${code})`).trim()));
-        else resolve(String(stdout || "").trim());
-      };
-      try {
-        if (window.ksu && typeof window.ksu.exec === "function") window.ksu.exec(command, "{}", callback);
-        else if (window.magisk && typeof window.magisk.exec === "function") window.magisk.exec(command, callback);
-        else throw new Error("Root WebUI command interface is unavailable");
-      } catch (error) {
-        window.clearTimeout(timeout);
-        delete window[callback];
-        reject(error);
-      }
-    });
-  }
-
-  function updatePreferences() {
-    state.language = state.languageMode === "system" ? systemLanguage() : state.languageMode;
-    state.theme = state.themeMode === "system"
-      ? (mediaTheme && mediaTheme.matches ? "dark" : "light")
-      : state.themeMode;
-    document.documentElement.dataset.theme = state.theme;
-    document.documentElement.dataset.themeMode = state.themeMode;
-    document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";
-    const pageColor = getComputedStyle(document.documentElement).getPropertyValue("--page").trim();
-    document.querySelector('meta[name="theme-color"]').content = pageColor || (state.theme === "dark" ? "#18211f" : "#eaf1ee");
-    document.querySelectorAll("[data-language-mode]").forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.languageMode === state.languageMode));
-    });
-    document.querySelectorAll("[data-theme-mode]").forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.themeMode === state.themeMode));
-    });
-  }
-
-  function setMessage(message, isError = false) {
-    const element = $("message");
-    element.textContent = message;
-    element.classList.toggle("error", isError);
-    element.classList.add("visible");
-    window.clearTimeout(state.messageTimer);
-    state.messageTimer = window.setTimeout(() => element.classList.remove("visible"), 3600);
-  }
-
-  function updateDirty() {
-    if (!state.original) return;
-    const now = JSON.stringify({
-      games: state.games,
-      globalRate: state.globalRate,
-      rates: [...state.rates.entries()].sort((a, b) => Number(a[0]) - Number(b[0])),
-      fallbackEnabled: state.fallbackEnabled,
-      fallbackMethod: state.fallbackMethod,
-      fallbackInterval: state.fallbackInterval,
-      fallbackPackages: state.fallbackPackages,
-      shortcuts: state.shortcuts
-    });
-    state.dirty = now !== state.original;
-    $("save-bar").hidden = !state.dirty;
-  }
-
-  function snapshot() {
-    state.original = JSON.stringify({
-      games: state.games,
-      globalRate: state.globalRate,
-      rates: [...state.rates.entries()].sort((a, b) => Number(a[0]) - Number(b[0])),
-      fallbackEnabled: state.fallbackEnabled,
-      fallbackMethod: state.fallbackMethod,
-      fallbackInterval: state.fallbackInterval,
-      fallbackPackages: state.fallbackPackages,
-      shortcuts: state.shortcuts
-    });
-  }
-
-  function restoreDraft() {
-    if (!state.original) return;
-    const data = JSON.parse(state.original);
-    state.games = data.games;
-    state.globalRate = data.globalRate;
-    state.rates = new Map(data.rates);
-    state.fallbackEnabled = data.fallbackEnabled;
-    state.fallbackMethod = data.fallbackMethod;
-    state.fallbackInterval = data.fallbackInterval;
-    state.fallbackPackages = data.fallbackPackages;
-    state.shortcuts = data.shortcuts;
-    state.dirty = false;
-    renderAll();
-    setMessage(t("settingsSaved"));
-  }
-
-  function applyTranslations() {
-    // renderRates() 会把「添加应用」的采样率下拉重置为 360；先记住选择再恢复。
-    const draftNewRate = $("new-rate").value || "";
-    updatePreferences();
-    document.title = t("documentTitle");
-    document.querySelectorAll("[data-i18n]").forEach((element) => { element.textContent = t(element.dataset.i18n); });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });
-    document.querySelectorAll("[data-i18n-aria]").forEach((element) => { element.setAttribute("aria-label", t(element.dataset.i18nAria)); });
-    renderAll();
-    if (draftNewRate && [...$("new-rate").options].some((option) => option.value === draftNewRate)) {
-      $("new-rate").value = draftNewRate;
-    }
-  }
-
-  function toBase64(text) {
-    const value = String(text);
-    try {
-      const bytes = new TextEncoder().encode(value);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      return btoa(binary);
-    } catch {
-      return btoa(unescape(encodeURIComponent(value)));
-    }
-  }
-
-  function cleanName(value) {
-    // 去掉名称开头的 #，避免 serializeConfig 写出 "##名称"。
-    return String(value || "").replace(/[\r\n=\t]/g, "").trim().replace(/^#+\s*/, "").trim().slice(0, 60);
-  }
-
-  function parseAppNames(text) {
-    const names = new Map();
-    for (const raw of String(text || "").split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const split = line.indexOf("=");
-      if (split < 1) continue;
-      const packageName = line.slice(0, split).trim();
-      const name = cleanName(line.slice(split + 1));
-      if (PACKAGE_PATTERN.test(packageName) && name) names.set(packageName, name);
-    }
-    return names;
-  }
-
-  function serializeAppNames() {
-    const lines = ["# App display names; package=name"];
-    for (const [packageName, name] of state.appNames) {
-      if (PACKAGE_PATTERN.test(packageName) && cleanName(name)) lines.push(`${packageName}=${cleanName(name)}`);
-    }
-    return lines.join("\n") + "\n";
-  }
-
-  async function persistAppNames() {
-    if (!window.ksu && !window.magisk) return;
-    try {
-      const payload = toBase64(serializeAppNames());
-      // 独立临时文件名：避免与 writeSettings() 的 APP_NAMES_PATH.tmp 并发覆盖。
-      await exec(`printf '%s' '${payload}' | base64 -d > '${APP_NAMES_PATH}.names.tmp' && chmod 0600 '${APP_NAMES_PATH}.names.tmp' && mv '${APP_NAMES_PATH}.names.tmp' '${APP_NAMES_PATH}'`);
-    } catch { /* Name cache is optional; package names remain usable. */ }
-  }
-
-  async function execWithRetry(command) {
-    try { return await exec(command); }
-    catch { return await exec(command); }
-  }
-
-  function parseConfig(text) {
-    const games = new Map();
-    const duplicates = [];
-    let globalRate = "125";
-    for (const raw of text.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const split = line.indexOf("=");
-      if (split < 1) continue;
-      const key = line.slice(0, split).trim();
-      const value = line.slice(split + 1).trim();
-      if (key === "global_sample_rate" && /^\d{1,4}$/.test(value)) globalRate = value;
-      else if (PACKAGE_PATTERN.test(key) && /^\d{1,4}$/.test(value)) {
-        // 手动编辑可能产生重复包名；记录下来提示用户「保存后将合并」。
-        if (games.has(key)) duplicates.push(key);
-        else games.set(key, { package: key, rate: value });
-      }
-    }
-    return { games: [...games.values()], globalRate, duplicates };
-  }
-
-  function parseMonitorConfig(text) {
-    let fallbackEnabled = false;
-    let fallbackMethod = "observer";
-    let fallbackInterval = "3";
-    const fallbackPackages = new Set();
-    for (const raw of text.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const split = line.indexOf("=");
-      if (split < 1) continue;
-      const key = line.slice(0, split).trim();
-      const value = line.slice(split + 1).trim();
-      if (key === "fallback_enabled") fallbackEnabled = value === "1";
-      else if (key === "fallback_method" && ["observer", "polling"].includes(value)) fallbackMethod = value;
-      else if (key === "poll_interval" && /^\d{1,2}$/.test(value) && Number(value) >= 1 && Number(value) <= 60) fallbackInterval = value;
-      else if (key === "fallback_package" && PACKAGE_PATTERN.test(value)) fallbackPackages.add(value);
-    }
-    return { fallbackEnabled, fallbackMethod, fallbackInterval, fallbackPackages: [...fallbackPackages] };
-  }
-
-  function parseRates(text) {
-    const rates = new Map();
-    for (const raw of text.split(/\r?\n/)) {
-      const match = raw.trim().match(/^(\d{1,4})=(.+)$/);
-      if (match && COMMAND_PATTERN.test(match[2])) rates.set(match[1], match[2]);
-    }
-    return rates;
-  }
-  // 逐行记录 rate_code.conf 的原始版式：注释、空行、无法识别的行原样保留，
-  // 只有 rate=command 行在保存时用 state.rates 的最新值重写。
-  function parseRateLayout(text) {
-    const rows = text.split(/\r?\n/);
-    if (text.endsWith("\n")) rows.pop();
-    return rows.map((raw) => {
-      const match = raw.trim().match(/^(\d{1,4})=(.+)$/);
-      if (match && COMMAND_PATTERN.test(match[2])) {
-        return { type: "rate", rate: match[1], command: match[2] };
-      }
-      return { type: "raw", text: raw };
-    });
-  }
-
-  function rateLabel(rate) {
-    const preset = DEFAULT_RATES.find(([id]) => id === rate);
-    return preset ? `${rate} Hz · ${t(preset[1])}` : `${rate} Hz`;
-  }
-
-  function renderRateSelect(select, selected, { includeUnmapped = false } = {}) {
-    const values = [...state.rates.keys()].sort((a, b) => Number(a) - Number(b));
-    if (includeUnmapped && selected && !state.rates.has(selected)) values.unshift(selected);
-    select.replaceChildren(...values.map((rate, index) => {
-      const option = document.createElement("option");
-      option.value = rate;
-      option.textContent = state.rates.has(rate) ? rateLabel(rate) : `${rate} Hz · ${state.language === "zh" ? "无命令映射" : "No command mapping"}`;
-      option.selected = rate === selected;
-      if (includeUnmapped && index === 0 && !state.rates.has(rate)) option.disabled = true;
-      return option;
-    }));
-    if (!values.length) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "—";
-      select.append(option);
-    }
-  }
-
-  function appLabel(packageName) {
-    const info = state.appInfo.get(packageName);
-    if (info && info.name) return info.name;
-    return state.appNames.get(packageName) || packageName;
-  }
-
-  function appIcon(packageName, name) {
-    const avatar = document.createElement("span");
-    avatar.className = "app-avatar";
-    avatar.setAttribute("aria-hidden", "true");
-    const fallback = document.createElement("span");
-    fallback.className = "app-icon-placeholder";
-    fallback.textContent = (name || packageName).slice(0, 1).toUpperCase();
-    avatar.append(fallback);
-    if (window.ksu) {
-      const image = document.createElement("img");
-      image.alt = "";
-      image.src = `ksu://icon/${encodeURIComponent(packageName)}`;
-      image.addEventListener("error", () => image.remove(), { once: true });
-      avatar.append(image);
-    }
-    return avatar;
-  }
-
-  function appIdentity(packageName) {
-    const name = appLabel(packageName);
-    const wrap = document.createElement("span");
-    wrap.className = "application-identity";
-    wrap.append(appIcon(packageName, name));
-    const copy = document.createElement("span");
-    copy.className = "application-copy";
-    const title = document.createElement("strong");
-    title.textContent = name;
-    const pkg = document.createElement("small");
-    pkg.textContent = packageName;
-    copy.append(title, pkg);
-    wrap.append(copy);
-    return wrap;
-  }
-
-  function renderGameRules() {
-    const list = $("game-rules");
-    const count = state.games.length;
-    $("app-count").textContent = t(count === 1 ? "appCountOne" : "appCount", { count });
-    if (!count) {
-      const empty = document.createElement("p");
-      empty.className = "empty-rules";
-      empty.textContent = t("emptyRules");
-      list.replaceChildren(empty);
-      return;
-    }
-    list.replaceChildren(...state.games.map((game, index) => {
-      const row = document.createElement("div");
-      row.className = "rule-row";
-      row.append(appIdentity(game.package));
-      const rate = document.createElement("select");
-      rate.setAttribute("aria-label", `${game.package} ${t("rateColumn")}`);
-      renderRateSelect(rate, game.rate, { includeUnmapped: true });
-      rate.addEventListener("change", () => {
-        state.games[index].rate = rate.value;
-        updateDirty();
-        renderRateList();
-      });
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "icon-button remove-button";
-      remove.setAttribute("aria-label", `${t("removeRule")} ${game.package}`);
-      remove.title = t("removeRule");
-      remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>';
-      remove.addEventListener("click", () => {
-        state.games.splice(index, 1);
-        renderGameRules();
-        updateDirty();
-        renderRateList();
-        setMessage(t("ruleRemoved"));
-      });
-      row.append(rate, remove);
-      return row;
-    }));
-  }
-
-  function renderFallbackApps() {
-    const list = $("fallback-packages");
-    if (!state.fallbackPackages.length) {
-      const empty = document.createElement("p");
-      empty.className = "empty-rules";
-      empty.textContent = t("fallbackNoApps");
-      list.replaceChildren(empty);
-      return;
-    }
-    list.replaceChildren(...state.fallbackPackages.map((packageName, index) => {
-      const row = document.createElement("div");
-      row.className = "fallback-row";
-      row.append(appIdentity(packageName));
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "icon-button remove-button";
-      remove.setAttribute("aria-label", `${t("fallbackRemove")} ${packageName}`);
-      remove.title = t("fallbackRemove");
-      remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>';
-      remove.addEventListener("click", () => {
-        state.fallbackPackages.splice(index, 1);
-        renderFallbackApps();
-        updateDirty();
-        setMessage(t("fallbackAppRemoved"));
-      });
-      row.append(remove);
-      return row;
-    }));
-  }
-
-  function renderMonitorSettings() {
-    $("fallback-enabled").checked = state.fallbackEnabled;
-    $("fallback-method").value = state.fallbackMethod;
-    $("fallback-interval").value = state.fallbackInterval;
-    renderFallbackApps();
-  }
-
-  function renderRates() {
-    for (const select of [$("global-rate"), $("home-global-rate"), $("new-rate")]) {
-      const selected = select === $("new-rate") ? (state.rates.has("360") ? "360" : [...state.rates.keys()][0]) : state.globalRate;
-      renderRateSelect(select, selected);
-      select.value = selected || "";
-    }
-    $("global-rate-value").textContent = state.globalRate;
-    renderGameRules();
-    renderMonitorSettings();
-    renderShortcuts();
-    renderRateList();
-  }
-
-  function renderShortcutSettings() {
-    const root = $("shortcut-settings");
-    root.replaceChildren(...state.shortcuts.map((shortcut, index) => {
-      const row = document.createElement("div");
-      row.className = "shortcut-setting-row";
-      const label = document.createElement("label");
-      label.className = "field shortcut-select-field";
-      const caption = document.createElement("span");
-      caption.textContent = t("shortcutSlot", { number: index + 1 });
-      const action = document.createElement("select");
-      action.setAttribute("aria-label", caption.textContent);
-      const options = [["", "shortcutNone"], ["enable", "shortcutEnable"], ["disable", "shortcutDisable"], ["setGlobal", "shortcutSetGlobal"]];
-      action.replaceChildren(...options.map(([value, key]) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = t(key);
-        option.selected = shortcut.action === value;
-        return option;
-      }));
-      action.addEventListener("change", () => {
-        state.shortcuts[index].action = action.value;
-        updateDirty();
-        renderShortcuts();
-        renderRateList();
-      });
-      label.append(caption, action);
-      row.append(label);
-      if (shortcut.action === "setGlobal") {
-        row.classList.add("has-rate");
-        const rateLabel = document.createElement("label");
-        rateLabel.className = "field shortcut-rate-field";
-        const rateCaption = document.createElement("span");
-        rateCaption.textContent = t("shortcutRate");
-        const rate = document.createElement("select");
-        rate.setAttribute("aria-label", `${caption.textContent} ${t("shortcutRate")}`);
-        renderRateSelect(rate, shortcut.rate);
-        rate.value = shortcut.rate;
-        rate.addEventListener("change", () => {
-          state.shortcuts[index].rate = rate.value;
-          updateDirty();
-          renderShortcuts();
-          renderRateList();
+      const current = JSON.parse(readPref('touch-ui-shortcuts-v2', 'null'));
+      const legacy = JSON.parse(readPref('touch-ui-shortcuts', 'null'));
+      const slots = current || legacy;
+      if (Array.isArray(slots) && slots.length === 3) {
+        return slots.map(slot => {
+          const action = typeof slot === 'string' ? slot : slot?.action;
+          const migrated = action === 'enable' ? 'turnOn' : action === 'disable' ? 'turnOff' : action;
+          const rate = String(slot?.rate || '360');
+          return { action: shortcutOptions.includes(migrated) ? migrated : 'none', rate: /^[1-9]\d{0,3}$/.test(rate) ? rate : '360' };
         });
-        rateLabel.append(rateCaption, rate);
-        row.append(rateLabel);
       }
-      return row;
-    }));
+    } catch { /* Use default actions when preferences cannot be read. */ }
+    return ['calcRule', 'resync', 'diagnostics'].map(action => ({ action, rate: '360' }));
   }
-
-  function shortcutTitle(shortcut) {
-    if (shortcut.action === "enable") return t("actionEnable");
-    if (shortcut.action === "disable") return t("actionDisable");
-    if (shortcut.action === "setGlobal") {
-      return state.rates.has(shortcut.rate) ? t("actionSetGlobal", { rate: shortcut.rate }) : t("shortcutRateInvalid");
-    }
-    return t("actionUnavailable");
-  }
-
-  function renderShortcuts() {
-    renderShortcutSettings();
-    const root = $("quick-actions");
-    const configured = state.shortcuts.filter((shortcut) => shortcut.action);
-    if (!configured.length) {
-      const empty = document.createElement("p");
-      empty.className = "empty-rules";
-      empty.textContent = t("actionUnavailable");
-      root.replaceChildren(empty);
-      return;
-    }
-    root.replaceChildren(...state.shortcuts.map((shortcut, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "quick-action";
-      const invalidRate = shortcut.action === "setGlobal" && !state.rates.has(shortcut.rate);
-      button.disabled = !shortcut.action || invalidRate;
-      if (invalidRate) button.title = t("shortcutRateInvalid");
-      const icon = document.createElement("span");
-      icon.className = `quick-action-icon ${shortcut.action || "empty"}`;
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = shortcut.action === "enable" ? "▶" : shortcut.action === "disable" ? "Ⅱ" : shortcut.action === "setGlobal" ? "Hz" : "·";
-      const label = document.createElement("span");
-      label.className = "quick-action-label";
-      label.textContent = shortcutTitle(shortcut);
-      button.append(icon, label);
-      if (shortcut.action && !invalidRate) button.addEventListener("click", () => runShortcut(index));
-      return button;
-    }));
-  }
-
-  function renderRateList() {
-    const list = $("rate-list");
-    const values = [...state.rates.entries()].sort((a, b) => Number(a[0]) - Number(b[0]));
-    list.replaceChildren(...values.map(([rate, command]) => {
-      const row = document.createElement("li");
-      const rateLabelNode = document.createElement("strong");
-      rateLabelNode.textContent = `${rate} Hz`;
-      const code = document.createElement("code");
-      code.textContent = command;
-      const remove = document.createElement("button");
-      const inUse = state.globalRate === rate || state.games.some((game) => game.rate === rate) || state.shortcuts.some((item) => item.action === "setGlobal" && item.rate === rate);
-      remove.type = "button";
-      remove.className = "icon-button remove-button mapping-remove";
-      remove.disabled = inUse;
-      remove.title = inUse ? t("mappingInUse") : t("removeMapping");
-      remove.setAttribute("aria-label", `${t("removeMapping")} ${rate} Hz`);
-      remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
-      remove.addEventListener("click", () => {
-        if (inUse) return;
-        state.rates.delete(rate);
-        renderRates();
-        updateDirty();
-        setMessage(t("mappingRemoved"));
-      });
-      row.append(rateLabelNode, code, remove);
-      return row;
-    }));
-  }
-
-  function renderService() {
-    const status = state.service.state || (state.enabled ? "starting" : "disabled");
-    const labels = {
-      disabled: "statusDisabled", waiting: "statusWaiting", starting: "statusStarting",
-      running: "statusRunning", degraded: "statusDegraded", error: "statusError", unavailable: "statusUnavailable"
-    };
-    const descriptions = {
-      disabled: "engineStateOff", waiting: "engineStateWaiting", starting: "engineStateStarting",
-      running: "engineStateRunning", degraded: "engineStateDegraded", error: "engineStateError", unavailable: "engineStateUnavailable"
-    };
-    const statusNode = $("service-status");
-    statusNode.textContent = t(labels[status] || "statusUnavailable");
-    statusNode.className = `status-value ${status}`;
-    $("enabled").checked = state.enabled;
-    $("enabled-label").textContent = t(state.enabled ? "enabled" : "disabled");
-    $("enabled-state-dot").className = `state-dot ${state.enabled ? "enabled-dot" : ""}`;
-    $("status-description").textContent = t(descriptions[status] || "engineStateUnavailable");
-    const foreground = state.enabled ? (state.service.foreground_package || "") : "";
-    $("foreground-package").textContent = foreground || "—";
-    const reportedName = (state.service.foreground_name || "").trim();
-    const knownName = reportedName || (state.appInfo.get(foreground) || {}).name || state.appNames.get(foreground) || "";
-    $("foreground-name").textContent = foreground ? (knownName || t("unknownApp")) : t("unknownApp");
-    const iconHost = $("foreground-icon");
-    iconHost.replaceChildren();
-    if (foreground) iconHost.append(appIcon(foreground, appLabel(foreground)));
-    else {
-      const fallback = document.createElement("span");
-      fallback.className = "app-icon-placeholder";
-      fallback.textContent = "—";
-      iconHost.append(fallback);
-    }
-    $("current-rate").textContent = state.enabled && state.service.rate ? state.service.rate : "—";
-    const modeLabel = state.service.mode === "events" ? "eventModeEvents"
-      : state.service.mode === "observer" ? "eventModeObserver"
-        : state.service.mode === "polling" ? "eventModePolling" : "eventModeStarting";
-    let modeText = t(modeLabel);
-    if (state.service.fallback_active === "1" && state.service.fallback_package) {
-      modeText += t("fallbackActiveFor", { app: appLabel(state.service.fallback_package) });
-    }
-    $("event-mode").textContent = modeText;
-    const heartbeat = Number(state.service.heartbeat || 0);
-    $("heartbeat-time").textContent = heartbeat ? t("recentHeartbeat", { seconds: Math.max(0, Math.floor(Date.now() / 1000 - heartbeat)) }) : t("noHeartbeat");
-  }
-
-  function renderAll() {
-    renderRates();
-    renderService();
-    updateDirty();
-  }
-
-  function parseFields(text) {
-    const values = {};
-    for (const line of text.split(/\r?\n/)) {
-      const separator = line.indexOf("=");
-      if (separator > 0) values[line.slice(0, separator)] = line.slice(separator + 1).trim();
-    }
-    return values;
-  }
-
-  async function managerInfo() {
-    const isKsu = Boolean(window.ksu);
-    const isMagisk = Boolean(window.magisk);
-    $("manager-name").textContent = t(isKsu ? "managerKsu" : isMagisk ? "managerMagisk" : "managerUnknown");
-    try {
-      // 每条 getprop 加固定前缀：某个属性为空时不会让后续字段整体前移。
-      const output = await exec("printf 'M:%s\\n' \"$(getprop ro.product.manufacturer)\"; printf 'D:%s\\n' \"$(getprop ro.product.model)\"; printf 'A:%s\\n' \"$(getprop ro.build.version.release)\"");
-      const lines = output.split(/\r?\n/);
-      const pick = (prefix) => (lines.find((line) => line.startsWith(prefix)) || "").slice(2).trim();
-      const manufacturer = pick("M:");
-      const model = pick("D:");
-      const android = pick("A:");
-      $("device-info").textContent = [manufacturer, model].filter(Boolean).join(" ") || "—";
-      $("android-version").textContent = android || "—";
-    } catch {
-      $("device-info").textContent = "—";
-      $("android-version").textContent = "—";
-    }
-  }
-
-  async function loadApplicationInfo(packages) {
-    const unique = [...new Set(packages)].filter((name) => PACKAGE_PATTERN.test(name) && !state.appInfo.has(name));
-    if (!unique.length || !window.ksu || typeof window.ksu.getPackagesInfo !== "function") return;
-    try {
-      let result = await window.ksu.getPackagesInfo(JSON.stringify(unique));
-      if (typeof result === "string") result = JSON.parse(result);
-      if (!Array.isArray(result) && result && typeof result === "object") result = Object.values(result);
-      if (!Array.isArray(result)) return;
-      let namesChanged = false;
-      for (const info of result) {
-        if (!info || typeof info !== "object") continue;
-        const packageName = info.packageName || info.package_name || info.package || info.name;
-        if (!unique.includes(packageName)) continue;
-        const displayName = info.appName || info.appLabel || info.label || info.applicationLabel || info.title || packageName;
-        state.appInfo.set(packageName, { name: displayName });
-        const cleaned = cleanName(displayName);
-        if (cleaned && cleaned !== packageName && state.appNames.get(packageName) !== cleaned) {
-          state.appNames.set(packageName, cleaned);
-          namesChanged = true;
-        }
-      }
-      if (namesChanged) persistAppNames();
-      renderGameRules();
-      renderFallbackApps();
-      renderService();
-    } catch { /* Package names and placeholder icons remain available without the optional KSU API. */ }
-  }
-
-  function serializeConfig() {
-    if (!state.rates.has(state.globalRate)) throw new Error(t("invalidGlobal"));
-    const unique = new Set();
-    for (const game of state.games) {
-      if (!PACKAGE_PATTERN.test(game.package)) throw new Error(t("invalidPackage"));
-      if (!state.rates.has(game.rate)) throw new Error(t("invalidRuleRate", { rate: game.rate }));
-      if (unique.has(game.package)) throw new Error(t("duplicatePackageSave", { package: game.package }));
-      unique.add(game.package);
-    }
-    const lines = [`global_sample_rate=${state.globalRate}`];
-    for (const { package: name, rate } of state.games) {
-      const label = cleanName(state.appNames.get(name) || "");
-      if (label) lines.push(`#${label}`);
-      lines.push(`${name}=${rate}`);
-    }
-    return lines.join("\n") + "\n";
-  }
-
-  // 保留原注释块不动：raw 行原样输出，rate 行只重写等号右边。
-  // 删除映射时其上方注释作为孤立注释保留；新增映射追加到末尾；
-  // 重复 rate 行只输出第一个。返回的 layout 由 writeSettings 在写盘成功后提交。
-  function serializeRates() {
-    const emitted = new Set();
-    const nextLayout = [];
-    const lines = [];
-    for (const entry of state.rateLayout || []) {
-      if (entry.type === "raw") {
-        lines.push(entry.text);
-        nextLayout.push({ type: "raw", text: entry.text });
-        continue;
-      }
-      if (emitted.has(entry.rate) || !state.rates.has(entry.rate)) continue;
-      const command = state.rates.get(entry.rate);
-      lines.push(`${entry.rate}=${command}`);
-      nextLayout.push({ type: "rate", rate: entry.rate, command });
-      emitted.add(entry.rate);
-    }
-    for (const [rate, command] of [...state.rates.entries()].sort((a, b) => Number(a[0]) - Number(b[0]))) {
-      if (emitted.has(rate)) continue;
-      lines.push(`${rate}=${command}`);
-      nextLayout.push({ type: "rate", rate, command });
-      emitted.add(rate);
-    }
-    return { text: lines.join("\n") + "\n", layout: nextLayout };
-  }
-
-  function serializeMonitorConfig() {
-    if (!["observer", "polling"].includes(state.fallbackMethod)) throw new Error(t("fallbackMethodLabel"));
-    if (!/^\d{1,2}$/.test(state.fallbackInterval) || Number(state.fallbackInterval) < 1 || Number(state.fallbackInterval) > 60) {
-      throw new Error(t("invalidFallbackInterval"));
-    }
-    const unique = new Set();
-    for (const packageName of state.fallbackPackages) {
-      if (!PACKAGE_PATTERN.test(packageName)) throw new Error(t("invalidPackage"));
-      if (unique.has(packageName)) throw new Error(t("duplicateFallbackPackage", { package: packageName }));
-      unique.add(packageName);
-    }
-    return [
-      `fallback_enabled=${state.fallbackEnabled ? 1 : 0}`,
-      `fallback_method=${state.fallbackMethod}`,
-      `poll_interval=${state.fallbackInterval}`,
-      ...state.fallbackPackages.map((packageName) => `fallback_package=${packageName}`),
-      ""
-    ].join("\n");
-  }
-
-  async function writeSettings() {
-    const config = toBase64(serializeConfig());
-    const ratesOutput = serializeRates();
-    const rates = toBase64(ratesOutput.text);
-    const monitor = toBase64(serializeMonitorConfig());
-    const names = toBase64(serializeAppNames());
-    const command = `printf '%s' '${config}' | base64 -d > '${CONFIG_PATH}.tmp' && printf '%s' '${rates}' | base64 -d > '${RATE_PATH}.tmp' && printf '%s' '${monitor}' | base64 -d > '${MONITOR_CONFIG_PATH}.tmp' && printf '%s' '${names}' | base64 -d > '${APP_NAMES_PATH}.tmp' && chmod 0600 '${CONFIG_PATH}.tmp' '${RATE_PATH}.tmp' '${MONITOR_CONFIG_PATH}.tmp' '${APP_NAMES_PATH}.tmp' && mv '${CONFIG_PATH}.tmp' '${CONFIG_PATH}' && mv '${RATE_PATH}.tmp' '${RATE_PATH}' && mv '${MONITOR_CONFIG_PATH}.tmp' '${MONITOR_CONFIG_PATH}' && mv '${APP_NAMES_PATH}.tmp' '${APP_NAMES_PATH}'`;
-    // 单条 exec 命令长度上限保护；保留「四个 .tmp 全写好再统一 chmod+mv」的准原子性。
-    if (command.length > MAX_WRITE_COMMAND) throw new Error(t("configTooLarge"));
-    await exec(command);
-    // 写盘成功后才提交新版式，避免写入失败时内存与磁盘不一致、再次保存重复追加。
-    state.rateLayout = ratesOutput.layout;
-  }
-
-  async function restartIfEnabled() {
-    if (!state.enabled) return;
-    // 交给常驻监督进程热重启工作进程：不杀监督进程、不写 stop.flag、不重新拉起服务，
-    // 彻底避开「旧进程卡在 wait + 新进程被单实例检查挡掉」的竞态。
-    // restart.flag 是边沿触发标记，重试可能让监督进程多热重启一次，因此不做重试。
-    await exec(`: > '${RESTART_PATH}'`);
-    state.service = { ...state.service, state: "starting" };
-    renderService();
-  }
-
-  async function saveSettings() {
-    serializeConfig();
-    const previous = state.original ? JSON.parse(state.original) : null;
-    const currentRates = [...state.rates.entries()].sort((a, b) => Number(a[0]) - Number(b[0]));
-    const runtimeChanged = !previous
-      || previous.globalRate !== state.globalRate
-      || JSON.stringify(previous.games) !== JSON.stringify(state.games)
-      || JSON.stringify(previous.rates) !== JSON.stringify(currentRates)
-      || previous.fallbackEnabled !== state.fallbackEnabled
-      || previous.fallbackMethod !== state.fallbackMethod
-      || previous.fallbackInterval !== state.fallbackInterval
-      || JSON.stringify(previous.fallbackPackages) !== JSON.stringify(state.fallbackPackages);
-    if (runtimeChanged) await writeSettings();
-    localWrite("touch-ui-shortcuts", JSON.stringify(state.shortcuts));
-    state.dirty = false;
-    snapshot();
-    $("save-bar").hidden = true;
-    setMessage(t("settingsSaved"));
-    if (runtimeChanged) {
-      // 磁盘已写入、dirty 已清；重启失败只提示，不回滚 UI，不抛到外层覆盖「已保存」。
-      try {
-        await restartIfEnabled();
-      } catch (error) {
-        setMessage(t("savedButRestartFailed", { error: error.message }), true);
-      }
-    }
-  }
-
-  async function refreshStatus() {
-    // exec 若在 WebView 后台卡住，polling 会永久为 true；超时强制解锁。
-    // exec() 单次 8s、execWithRetry 最多两次共 16s，阈值必须大于最坏耗时。
-    if (state.polling) {
-      if (Date.now() - state.pollingSince > 20000) state.polling = false;
-      else return;
-    }
-    state.polling = true;
-    state.pollingSince = Date.now();
-    try {
-      const snapshot = await execWithRetry(
-        `enabled=$(cat '${FLAG_PATH}' 2>/dev/null || true); ` +
-        `status=$(cat '${STATUS_PATH}' 2>/dev/null || true); ` +
-        `watchdog_status=$(cat '${WATCHDOG_STATUS_PATH}' 2>/dev/null || true); ` +
-        `boot=$(getprop sys.boot_completed 2>/dev/null || true); ` +
-        `process=stopped; pid=$(cat '${PID_PATH}' 2>/dev/null); ` +
-        `case "$pid" in ''|*[!0-9]*) ;; *) if kill -0 "$pid" 2>/dev/null && tr '\\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null | ${SERVICE_CMD_MATCH}; then process=running; fi ;; esac; ` +
-        `watchdog=stopped; wpid=$(cat '${WATCHDOG_PID_PATH}' 2>/dev/null); ` +
-        `case "$wpid" in ''|*[!0-9]*) ;; *) if kill -0 "$wpid" 2>/dev/null; then watchdog=running; fi ;; esac; ` +
-        `printf 'enabled=%s\\nprocess=%s\\npid_value=%s\\nwatchdog=%s\\nboot=%s\\n--status--\\n%s\\n--watchdog--\\n%s\\n' "$enabled" "$process" "$pid" "$watchdog" "$boot" "$status" "$watchdog_status"`
-      );
-      const statusSep = snapshot.indexOf("--status--\n");
-      const watchdogSep = snapshot.indexOf("--watchdog--\n");
-      const fields = parseFields(statusSep >= 0 ? snapshot.slice(0, statusSep) : snapshot);
-      const statusBlock = statusSep >= 0
-        ? snapshot.slice(statusSep + 11, watchdogSep >= 0 ? watchdogSep : snapshot.length) : "";
-      const watchdogBlock = watchdogSep >= 0 ? snapshot.slice(watchdogSep + 13) : "";
-      const reported = parseFields(statusBlock);
-      const watchdog = parseFields(watchdogBlock);
-      const isEnabled = fields.enabled === "1";
-      if (isEnabled && !state.enabledAt) state.enabledAt = Date.now();
-      if (!isEnabled) state.enabledAt = 0;
-      state.enabled = isEnabled;
-
-      const processRunning = fields.process === "running";
-      const watchdogRunning = fields.watchdog === "running";
-      const heartbeat = Number(reported.heartbeat || 0);
-      const heartbeatFresh = heartbeat > 0 && Date.now() / 1000 - heartbeat <= 45;
-      const stateSince = Number(reported.state_since || 0);
-      const recentlyStarted = stateSince > 0 && Date.now() / 1000 - stateSince < 20000;
-      const pidMatches = Boolean(reported.pid) && Boolean(fields.pid_value) && reported.pid === fields.pid_value;
-      // 只有工作进程确实在跑、心跳新鲜、且状态文件属于当前进程，才算真的运行中。
-      const workerEvidence = processRunning && heartbeatFresh && pidMatches;
-      const watchdogHeartbeat = Number(watchdog.watchdog_heartbeat || 0);
-      const watchdogFresh = watchdogHeartbeat > 0 && Date.now() / 1000 - watchdogHeartbeat <= 30;
-      const watchdogState = watchdog.watchdog_state || "";
-      const staleError = reported.state === "error" && (workerEvidence || watchdogFresh);
-      let serviceState = "disabled";
-      if (state.enabled) {
-        if (!processRunning && !watchdogRunning && !watchdogFresh) {
-          serviceState = fields.boot !== "1" ? "waiting" : recentlyStarted ? "starting" : "error";
-        } else if (!workerEvidence) {
-          // 工作进程不在、心跳停了，或状态文件是上一个进程留下的：不能显示运行中。
-          serviceState = (watchdogRunning || watchdogFresh) && recentlyStarted ? "starting" : "error";
-        } else if (reported.state === "starting" || watchdogState === "cooldown") {
-          serviceState = "starting";
-        } else if (reported.state === "error") {
-          serviceState = staleError ? "starting" : "error";
-        } else if (["running", "degraded"].includes(reported.state)) {
-          serviceState = reported.state;
-        } else {
-          serviceState = "starting";
-        }
-      }
-      state.service = {
-        ...reported, ...watchdog, process: fields.process, watchdog: fields.watchdog,
-        stale_error: staleError ? "1" : "0", state: serviceState
-      };
-      state.unavailable = false;
-      renderService();
-      if (reported.foreground_package || reported.fallback_package) {
-        loadApplicationInfo([reported.foreground_package, reported.fallback_package].filter(Boolean));
-      }
-    } catch {
-      // 读不到磁盘状态时，不能继续显示「已启用 / 运行中」这类确定性结论。
-      state.unavailable = true;
-      state.service = { ...state.service, state: "unavailable" };
-      renderService();
-      setMessage(t("refreshFailed"), true);
-    } finally {
-      state.loaded = true;
-      state.polling = false;
-      state.pollingSince = 0;
-    }
-  }
-
-  async function refreshLog() {
-    try {
-      const log = await exec(`tail -n 100 '${MODULE_DIR}/touch_opt.log' 2>/dev/null || true`);
-      $("log-output").textContent = log || t("emptyLog");
-    } catch (error) { $("log-output").textContent = error.message; }
-  }
-
-  async function load() {
-    try {
-      const [configText, rateText, enabledText, monitorText, namesText] = await Promise.all([
-        exec(`cat '${CONFIG_PATH}' 2>/dev/null || true`),
-        exec(`cat '${RATE_PATH}' 2>/dev/null || true`),
-        exec(`cat '${FLAG_PATH}' 2>/dev/null || true`),
-        exec(`cat '${MONITOR_CONFIG_PATH}' 2>/dev/null || true`),
-        exec(`cat '${APP_NAMES_PATH}' 2>/dev/null || true`)
-      ]);
-      if (!rateText) throw new Error("Touch rate mapping is unavailable");
-      state.rates = parseRates(rateText);
-      state.rateLayout = parseRateLayout(rateText);
-      state.appNames = parseAppNames(namesText);
-      const config = parseConfig(configText);
-      const monitorConfig = parseMonitorConfig(monitorText);
-      state.games = config.games;
-      state.globalRate = config.globalRate;
-      state.fallbackEnabled = monitorConfig.fallbackEnabled;
-      state.fallbackMethod = monitorConfig.fallbackMethod;
-      state.fallbackInterval = monitorConfig.fallbackInterval;
-      state.fallbackPackages = monitorConfig.fallbackPackages;
-      state.enabled = enabledText === "1";
-      state.shortcuts = readShortcuts();
-      state.loaded = true;
-      state.unavailable = false;
-      snapshot();
-      applyTranslations();
-      await Promise.all([refreshStatus(), refreshLog(), managerInfo()]);
-      loadApplicationInfo(state.games.map((game) => game.package).concat(state.fallbackPackages, state.service.foreground_package || [], state.service.fallback_package || []));
-      if (config.duplicates.length) {
-        setMessage(t("duplicateRulesMerged", { count: config.duplicates.length }), true);
-      }
-    } catch (error) {
-      state.unavailable = true;
-      state.service = { state: "unavailable" };
-      renderAll();
-      setMessage(error.message, true);
-    }
-  }
-
-  function goTo(page) {
-    if (!["home", "config", "about"].includes(page)) return;
-    document.querySelectorAll(".page").forEach((element) => {
-      const active = element.dataset.page === page;
-      element.hidden = !active;
-      element.classList.toggle("active", active);
-    });
-    document.querySelectorAll(".nav-item").forEach((button) => {
-      const active = button.dataset.goto === page;
-      button.classList.toggle("active", active);
-      if (active) button.setAttribute("aria-current", "page");
-      else button.removeAttribute("aria-current");
-    });
-    if (page === "about") refreshLog();
-    // 先切 hidden 再立即置顶，避免 smooth 动画与 page-in 动画叠加造成视觉错位。
-    $("app-shell").scrollTo({ top: 0, behavior: "auto" });
-  }
-
-  function askBeforeAction(action) {
-    if (!state.dirty) return Promise.resolve().then(action).catch((error) => setMessage(t("serviceActionError", { error: error.message }), true));
-    pendingAction = action;
-    if (!$("unsaved-dialog").open) $("unsaved-dialog").showModal();
-    return Promise.resolve();
-  }
-
-  async function finishPending(choice) {
-    const task = pendingAction;
-    if (choice === "continue") {
-      pendingAction = null;
-      $("unsaved-dialog").close();
-      return;
-    }
-    try {
-      if (choice === "save") await saveSettings();
-      else restoreDraft();
-      pendingAction = null;
-      $("unsaved-dialog").close();
-      if (task) await task();
-    } catch (error) {
-      setMessage(t("serviceActionError", { error: error.message }), true);
-    }
-  }
-
-  async function setEnabled(enabled) {
-    try {
-      if (enabled) {
-        if (state.dirty) await saveSettings();
-        await exec(`rm -f '${STOP_PATH}' '${RESTART_PATH}' && printf '1\\n' > '${FLAG_PATH}.tmp' && chmod 0600 '${FLAG_PATH}.tmp' && mv '${FLAG_PATH}.tmp' '${FLAG_PATH}' && (nohup sh '${SERVICE_PATH}' >/dev/null 2>&1 </dev/null &)`);
-        state.enabledAt = Date.now();
-        setMessage(t("enabledMessage"));
-      } else {
-        await exec(`printf '0\\n' > '${FLAG_PATH}.tmp' && chmod 0600 '${FLAG_PATH}.tmp' && mv '${FLAG_PATH}.tmp' '${FLAG_PATH}' && : > '${STOP_PATH}' && rm -f '${RESTART_PATH}' && { for f in '${WATCHDOG_PID_PATH}' '${PID_PATH}'; do pid=$(cat "$f" 2>/dev/null); case "$pid" in ''|*[!0-9]*) ;; *) if kill -0 "$pid" 2>/dev/null && tr '\\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null | ${SERVICE_CMD_MATCH}; then kill "$pid" 2>/dev/null || true; fi ;; esac; done; }`);
-        state.enabledAt = 0;
-        setMessage(t("disabledMessage"));
-      }
-    } finally {
-      // root 命令可能超时或返回非零，但磁盘状态可能已经改变。
-      // 无论成功失败都重新渲染并强制回读磁盘，避免界面冻结在上一次状态。
-      state.enabled = enabled;
-      state.service = { ...state.service, state: enabled ? "starting" : "disabled" };
-      renderService();
-      window.setTimeout(refreshStatus, 300);
-    }
-  }
-
-  function runShortcut(index) {
-    const shortcut = { ...state.shortcuts[index] };
-    if (!shortcut.action) return;
-    askBeforeAction(async () => {
-      if (shortcut.action === "enable") return setEnabled(true);
-      if (shortcut.action === "disable") return setEnabled(false);
-      if (shortcut.action === "setGlobal") {
-        if (!state.rates.has(shortcut.rate)) throw new Error(t("invalidRuleRate", { rate: shortcut.rate }));
-        state.globalRate = shortcut.rate;
-        $("global-rate").value = shortcut.rate;
-        $("home-global-rate").value = shortcut.rate;
-        $("global-rate-value").textContent = shortcut.rate;
-        updateDirty();
-        await saveSettings();
-        setMessage(t("setGlobalDone"));
-      }
-    });
-  }
-
-  function exitWebUi(guardReinserted) {
-    try {
-      if (window.ksu && typeof window.ksu.exit === "function") return window.ksu.exit();
-      if (window.magisk && typeof window.magisk.exit === "function") return window.magisk.exit();
-    } catch { /* Fall back to the WebView history. */ }
-    // ksu.exit()/magisk.exit() 可用时上面已直接 return；只有两者都缺失才走到这里，
-    // 因此下面的兜底是低优先级。历史条目不足时 go(-2) 会被浏览器忽略。
-    window.history.go(guardReinserted ? -2 : -1);
-    if (exitFallbackUsed) return;
-    exitFallbackUsed = true;
-    window.setTimeout(() => {
-      if (document.hidden) return;
-      // 只尝试一次关闭，不主动 back()，避免与 guardBack 的守卫形成循环。
-      try { window.close(); } catch { /* WebView 可能禁止脚本关闭窗口。 */ }
-    }, 400);
-  }
-
-  function guardBack() {
-    window.history.pushState({ touchUiGuard: true }, "", `${window.location.pathname}${window.location.search}#touch-ui`);
-    window.addEventListener("popstate", () => {
-      if (state.dirty) {
-        pendingAction = () => exitWebUi(true);
-        // 连续 popstate 时对话框可能已经打开，重复 showModal() 会抛 InvalidStateError。
-        if (!$("unsaved-dialog").open) $("unsaved-dialog").showModal();
-        window.history.pushState({ touchUiGuard: true }, "", `${window.location.pathname}${window.location.search}#touch-ui`);
-      } else {
-        exitWebUi(false);
-      }
-    });
-  }
-
-  function changeGlobalRate(value) {
-    if (state.globalRate === value) return;
-    state.globalRate = value;
-    $("global-rate").value = value;
-    $("home-global-rate").value = value;
-    $("global-rate-value").textContent = value;
-    updateDirty();
-    renderRateList();
-  }
-
-  document.querySelectorAll("[data-language-mode]").forEach((button) => button.addEventListener("click", () => {
-    state.languageMode = button.dataset.languageMode;
-    localWrite("touch-ui-language-mode", state.languageMode);
-    applyTranslations();
-  }));
-  document.querySelectorAll("[data-theme-mode]").forEach((button) => button.addEventListener("click", () => {
-    state.themeMode = button.dataset.themeMode;
-    localWrite("touch-ui-theme-mode", state.themeMode);
-    applyTranslations();
-  }));
-  document.querySelectorAll("[data-goto]").forEach((button) => button.addEventListener("click", () => goTo(button.dataset.goto)));
-  $("global-rate").addEventListener("change", (event) => changeGlobalRate(event.target.value));
-  $("home-global-rate").addEventListener("change", (event) => changeGlobalRate(event.target.value));
-  $("add-rule-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const packageName = $("new-package").value.trim();
-    const rate = $("new-rate").value;
-    if (!PACKAGE_PATTERN.test(packageName)) return setMessage(t("invalidPackage"), true);
-    if (state.games.some((game) => game.package === packageName)) return setMessage(t("duplicatePackage", { package: packageName }), true);
-    state.games.push({ package: packageName, rate });
-    $("new-package").value = "";
-    renderGameRules();
-    updateDirty();
-    renderRateList();
-    loadApplicationInfo([packageName]);
-    setMessage(t("ruleAdded"));
-  });
-  $("fallback-enabled").addEventListener("change", (event) => {
-    state.fallbackEnabled = event.target.checked;
-    updateDirty();
-  });
-  $("fallback-method").addEventListener("change", (event) => {
-    state.fallbackMethod = event.target.value;
-    renderMonitorSettings();
-    updateDirty();
-  });
-  $("fallback-interval").addEventListener("input", (event) => {
-    state.fallbackInterval = event.target.value;
-    updateDirty();
-  });
-  $("add-fallback-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const packageName = $("fallback-package").value.trim();
-    if (!PACKAGE_PATTERN.test(packageName)) return setMessage(t("invalidPackage"), true);
-    if (state.fallbackPackages.includes(packageName)) return setMessage(t("duplicateFallbackPackage", { package: packageName }), true);
-    state.fallbackPackages.push(packageName);
-    $("fallback-package").value = "";
-    renderFallbackApps();
-    updateDirty();
-    loadApplicationInfo([packageName]);
-    setMessage(t("fallbackAppAdded"));
-  });
-  $("rate-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const rate = $("rate-id").value.trim();
-    const command = $("rate-command").value.trim();
-    if (!/^\d{1,4}$/.test(rate) || Number(rate) < 1) return setMessage(t("invalidRateId"), true);
-    if (!COMMAND_PATTERN.test(command)) return setMessage(t("invalidCommand"), true);
-    if (state.rates.has(rate)) return setMessage(t("rateExists", { rate }), true);
-    state.rates.set(rate, command);
-    $("rate-id").value = "";
-    $("rate-command").value = "";
-    renderRates();
-    updateDirty();
-    setMessage(t("mappingAdded"));
-  });
-  $("enabled").addEventListener("change", (event) => {
-    const requested = event.target.checked;
-    event.target.checked = state.enabled;
-    askBeforeAction(() => setEnabled(requested));
-  });
-  $("save-settings").addEventListener("click", async () => {
-    try { await saveSettings(); } catch (error) { setMessage(error.message, true); }
-  });
-  $("refresh-log").addEventListener("click", refreshLog);
-  $("dialog-save").addEventListener("click", () => finishPending("save"));
-  $("dialog-discard").addEventListener("click", () => finishPending("discard"));
-  $("dialog-continue").addEventListener("click", () => finishPending("continue"));
-  $("unsaved-dialog").addEventListener("cancel", () => { pendingAction = null; });
-
-  const onSystemThemeChange = () => { if (state.themeMode === "system") applyTranslations(); };
-  if (mediaTheme) {
-    if (typeof mediaTheme.addEventListener === "function") mediaTheme.addEventListener("change", onSystemThemeChange);
-    else if (typeof mediaTheme.addListener === "function") mediaTheme.addListener(onSystemThemeChange);
-  }
-  window.addEventListener("languagechange", () => { if (state.languageMode === "system") applyTranslations(); });
-
-  applyTranslations();
-  guardBack();
-  load();
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) return;
-    refreshStatus();
-    if (!$("page-about").hidden) refreshLog();
-  });
-  window.setInterval(() => {
-    refreshStatus();
-    if (!$("page-about").hidden) refreshLog();
-  }, 5000);
+  shortcuts = readShortcuts();
+  originalShortcuts = JSON.stringify(shortcuts);
+  bind();
+  translate();
+  fetchProfile();
+  refreshStatus();
 })();

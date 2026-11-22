@@ -13,7 +13,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -23,11 +23,20 @@ jobs:
       - name: Check module scripts
         run: |
           for script in _unpacked/*.sh; do sh -n "$script"; done
-          node tools/test_rate_layout.js
+          node --test tools/test_rate_layout.js
+          cargo fmt --manifest-path native/Cargo.toml -- --check
+          cargo clippy --locked --all-targets --manifest-path native/Cargo.toml -- -D warnings
+          cargo test --locked --manifest-path native/Cargo.toml
 
-      - name: Build and verify installable ZIP
+      - name: Build experimental arm64 Android worker
+        run: |
+          rustup target add aarch64-linux-android
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          bash tools/build_native.sh
+
+      - name: Build and verify both installable ZIPs
         id: package
-        run: bash tools/package_module.sh "$GITHUB_SHA"
+        run: bash tools/package_module.sh "$GITHUB_SHA" --experimental native/target/aarch64-linux-android/release/touch-listener
 
       - name: Create draft release with ZIP
         shell: bash
@@ -35,6 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.package.outputs.tag }}
           ASSET: ${{ steps.package.outputs.asset }}
+          EXPERIMENTAL_ASSET: ${{ steps.package.outputs.experimental_asset }}
         run: |
           releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$TAG\") | .id")
@@ -45,8 +55,10 @@ jobs:
             exit 1
           fi
 
-          release_url=$(gh release create "$TAG" "$ASSET" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
-            --title "ColorOSDynamic $TAG" \
-            --notes "Install \`$(basename "$ASSET")\` from Assets in your module manager. Do not install GitHub's Source code ZIP.")
+          release_url=$(gh release create "$TAG" "$ASSET" "$EXPERIMENTAL_ASSET" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease \
+            --title "ColorOSDynamic $TAG（非正式版）" \
+            --notes "**非正式版（Unofficial）**：可能随时改动或撤回，不保证稳定性。
+
+Install \`$(basename "$ASSET")\` from Assets in your module manager. The optional arm64 test ZIP lets you select the Rust listener in WebUI.")
           printf 'Draft release: %s\n\nInstaller: \`%s\`\n' "$release_url" "$(basename "$ASSET")" >> "$GITHUB_STEP_SUMMARY"

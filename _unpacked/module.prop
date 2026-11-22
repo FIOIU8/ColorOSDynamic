@@ -1,7 +1,7 @@
 id=ColorOSDynamic
 name=ColorOS 触控采样率优化
-version=2.5.2
-versionCode=27
+version=2.6.1
+versionCode=29
 author=星星
-description=前台应用触控采样率动态调整（默认关闭；应用名称日志、监督进程热重启与状态交叉校验）
+description=非正式版 · 按应用调整触控采样率 · 事件监听与息屏暂停 · 默认关闭
 support=Android 13+ / ColorOS 13+

@@ -1,0 +1,13 @@
+@app:com.example.game	1700000010.100 1000 1000 I wm_set_resumed_activity: [0,com.example.game/.Main,resumeTopActivity]
+@app:com.Sevse.jenny	1700000010.100 1000 1000 I am_set_resumed_activity: [10, com.Sevse.jenny/.Main,next]
+@focus	1700000010.100 1000 1000 I wm_set_resumed_activity: [0,wrong/.Main,next]
+@focus	1700000010.100 1000 1000 I wm_resume_activity: [0,123,9,com.example.game/.Game]
+@conflict	1700000010.100 1000 1000 I wm_focused_root_task: [0,0,5,7,resume]
+@conflict	1700000010.100 1000 1000 I wm_task_moved: [1,1,0]
+@keyguard	1700000010.100 1000 1000 I wm_set_keyguard_shown: [0,1,0,idle]
+@screen:asleep	1700000010.100 1000 1000 I screen_toggled: 0
+@screen:awake	1700000010.100 1000 1000 I screen_toggled: [1]
+	1700000010.100 1000 1000 I screen_toggled: -1
+	1700000010.100 1000 1000 I other: [0,com.fake.app/.Main,next]
+@screen:asleep	1700000010.100 1000 1000 I power_screen_state: [0,1,200,4,0]
+@screen:awake	1700000010.100 1000 1000 I power_screen_state: [1,1,200,4,0]

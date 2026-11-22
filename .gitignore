@@ -14,3 +14,4 @@ Thumbs.db
 /docs/
 *.[zZ][iI][pP]
 /dist/
+/native/target/
