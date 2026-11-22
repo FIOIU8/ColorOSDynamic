@@ -6,7 +6,7 @@ const { chromium } = require(process.env.COLOROS_PLAYWRIGHT || 'playwright');
 
 const profile = 'schema=1\nbackend=shell\n[rules]\n# original\nglobal_sample_rate=125\ncom.example.game=360\n[rates]\n125=touchHidlTest -c wo 0 26 0\n360=touchHidlTest -c wo 0 26 12c\n[monitor]\nfallback_enabled=0\npoll_interval=3\nfallback_method=polling\n[names]\ncom.example.game=示例应用\n';
 const status = 'state=running\nenabled=1\nexperimental=1\nscreen=awake\nrate=360\ntarget=360\nglobal=125\nforeground_package=com.example.game\nmode=events\nbackend=shell\n';
-const url = pathToFileURL(path.resolve(__dirname, '../_unpacked/webroot/index.html')).href;
+const url = pathToFileURL(path.resolve(__dirname, '../module/webroot/index.html')).href;
 
 async function run() {
   const browser = await chromium.launch({ executablePath: process.env.COLOROS_BROWSER || undefined });

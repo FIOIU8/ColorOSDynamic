@@ -1,7 +1,6 @@
 # Local AI tool state and memory
 .claude/
 .zcode/
-.workboddy/
 .workbuddy/
 .cchaha/
 .codex/
@@ -10,8 +9,29 @@
 Thumbs.db
 .DS_Store
 
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Node / WebUI tests
+node_modules/
+test-results/
+playwright-report/
+
 # Local research notes and generated release packages
 /docs/
-*.[zZ][iI][pP]
+*.zip
 /dist/
 /native/target/
+
+# Local leftovers
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej

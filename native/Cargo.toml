@@ -1,6 +1,7 @@
 [package]
 name = "touch-listener"
-version = "2.6.1"
+version = "1.0.0"
+authors = ["FIOIU8"]
 edition = "2021"
 
 [profile.release]

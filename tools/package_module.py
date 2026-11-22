@@ -25,12 +25,12 @@ def git(*args):
 def payload_from(ref):
     for name in PAYLOAD:
         if ref == "--worktree":
-            source = ROOT / "_unpacked" / name
+            source = ROOT / "module" / name
             if not source.is_file() or source.is_symlink():
                 raise ValueError(f"Missing regular file: {source}")
             yield name, source.read_bytes()
         else:
-            source = f"_unpacked/{name}"
+            source = f"module/{name}"
             entry = git("ls-tree", ref, "--", source)
             if not entry.startswith((b"100644 blob ", b"100755 blob ")):
                 raise ValueError(f"Missing regular file at {ref}: {source}")

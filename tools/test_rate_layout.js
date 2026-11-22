@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseProfile, serializeProfile, rewriteEntries } = require('../_unpacked/webroot/script');
+const { parseProfile, serializeProfile, rewriteEntries } = require('../module/webroot/script');
 
 const rates = '# standard\n125=touchHidlTest -c wo 0 26 0\n\n# compat\n360=touchHidlTest -c wo 0 26 12c\n';
 const sample = `schema=1\nbackend=shell\n[rules]\n# base\nglobal_sample_rate=125\ncom.example.game=360\n[rates]\n${rates}\n[monitor]\nfallback_enabled=1\npoll_interval=3\nfallback_method=polling\nfallback_app=com.example.game\n[names]\ncom.example.game=示例游戏\n`;

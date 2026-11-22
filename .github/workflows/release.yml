@@ -22,7 +22,7 @@ jobs:
 
       - name: Check module scripts
         run: |
-          for script in _unpacked/*.sh; do sh -n "$script"; done
+          for script in module/*.sh; do sh -n "$script"; done
           node --test tools/test_rate_layout.js
           cargo fmt --manifest-path native/Cargo.toml -- --check
           cargo clippy --locked --all-targets --manifest-path native/Cargo.toml -- -D warnings
@@ -59,6 +59,8 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease \
             --title "ColorOSDynamic $TAG（非正式版）" \
             --notes "**非正式版（Unofficial）**：可能随时改动或撤回，不保证稳定性。
+
+作者：FIOIU8
 
 Install \`$(basename "$ASSET")\` from Assets in your module manager. The optional arm64 test ZIP lets you select the Rust listener in WebUI.")
           printf 'Draft release: %s\n\nInstaller: \`%s\`\n' "$release_url" "$(basename "$ASSET")" >> "$GITHUB_STEP_SUMMARY"
