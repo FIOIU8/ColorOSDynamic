@@ -55,12 +55,12 @@ jobs:
             exit 1
           fi
 
+          notes=$(printf '%s\n\n%s\n\n%s' \
+            '**非正式版（Unofficial）**：可能随时改动或撤回，不保证稳定性。' \
+            '作者：FIOIU8' \
+            "Install \`$(basename "$ASSET")\` from Assets in your module manager. The optional arm64 test ZIP lets you select the Rust listener in WebUI.")
           release_url=$(gh release create "$TAG" "$ASSET" "$EXPERIMENTAL_ASSET" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease \
             --title "ColorOSDynamic $TAG（非正式版）" \
-            --notes "**非正式版（Unofficial）**：可能随时改动或撤回，不保证稳定性。
-
-作者：FIOIU8
-
-Install \`$(basename "$ASSET")\` from Assets in your module manager. The optional arm64 test ZIP lets you select the Rust listener in WebUI.")
+            --notes "$notes")
           printf 'Draft release: %s\n\nInstaller: \`%s\`\n' "$release_url" "$(basename "$ASSET")" >> "$GITHUB_STEP_SUMMARY"
