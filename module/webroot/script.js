@@ -527,6 +527,48 @@ if (typeof document !== 'undefined') (() => {
   const appList = $('installed-apps');
   const appListToggle = $('app-list-toggle');
   let installedApps = [], suggestionsRequested = false, activeApp;
+  const appIcons = new Map();
+  const hasIconBridge = typeof window.ksu?.getPackagesIcons === 'function';
+  const hasIconScheme = typeof window.ksu?.pm === 'function' || typeof window.ksu?.listPackages === 'function';
+  const appIconObserver = (hasIconBridge || hasIconScheme) && typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver(entries => {
+      if (appList.hidden) return;
+      const visible = entries.filter(({ isIntersecting, target }) => isIntersecting && appList.contains(target));
+      for (const { target } of visible) appIconObserver.unobserve(target);
+      loadAppIcons(visible.map(({ target }) => target));
+    }, { root: appList }) : null;
+
+  function loadAppIcons(options) {
+    const ids = options.map(option => option.dataset.pkg);
+    const missing = hasIconBridge ? ids.filter(pkg => !appIcons.has(pkg)) : [];
+    if (missing.length) {
+      // The bridge encodes bitmaps synchronously; only request visible, uncached rows.
+      for (const pkg of missing) appIcons.set(pkg, '');
+      try {
+        const icons = JSON.parse(window.ksu.getPackagesIcons(JSON.stringify(missing), 64));
+        if (!Array.isArray(icons)) throw new TypeError('Invalid app icons response');
+        const requested = new Set(missing);
+        for (const entry of icons) {
+          const { packageName, icon } = entry || {};
+          if (requested.has(packageName) && typeof icon === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(icon)) {
+            appIcons.set(packageName, icon);
+          }
+        }
+      } catch { /* Managers may not expose application icons. */ }
+    }
+    for (const option of options) {
+      const pkg = option.dataset.pkg;
+      const src = appIcons.get(pkg) || (hasIconScheme ? `ksu://icon/${pkg}` : '');
+      if (!src) continue;
+      const icon = option.querySelector('.app-suggestion-icon');
+      const image = document.createElement('img');
+      image.alt = '';
+      image.addEventListener('load', () => icon.replaceChildren(image), { once: true });
+      image.addEventListener('error', () => appIcons.set(pkg, ''), { once: true });
+      image.src = src;
+    }
+  }
+
   function positionRuleDialog() {
     const viewport = window.visualViewport;
     ruleDialog.style.setProperty('--rule-viewport-top', `${viewport?.offsetTop || 0}px`);
@@ -555,6 +597,7 @@ if (typeof document !== 'undefined') (() => {
   function closeAppList() {
     suggestionsRequested = false;
     highlightApp();
+    appIconObserver?.disconnect();
     setAppListVisible(false);
   }
   function renderAppList(keepHighlight = false) {
@@ -572,21 +615,32 @@ if (typeof document !== 'undefined') (() => {
       option.dataset.pkg = pkg;
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', 'false');
+      const icon = document.createElement('span');
+      icon.className = 'app-suggestion-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      const glyph = document.createElement('span');
+      glyph.className = 'symbol app-icon';
+      icon.append(glyph);
+      const text = document.createElement('span');
+      text.className = 'app-suggestion-text';
       const packageText = document.createElement('span');
       packageText.textContent = pkg;
-      option.append(packageText);
+      text.append(packageText);
       if (name !== pkg) {
         const label = document.createElement('small');
         label.textContent = name;
-        option.append(label);
+        text.append(label);
       }
+      option.append(icon, text);
       if (pkg === previous) nextActive = option;
       items.push(option);
     }
+    appIconObserver?.disconnect();
     appList.replaceChildren(...items);
     setAppListVisible(items.length > 0);
     if (!nextActive) appList.scrollTop = 0;
     highlightApp(nextActive);
+    if (appIconObserver) for (const option of items) appIconObserver.observe(option);
   }
   function loadApps() {
     if (!appJob) appJob = exec('apps').then(async text => {

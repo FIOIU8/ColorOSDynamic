@@ -19,6 +19,22 @@ async function run() {
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(({ profile, status, apps }) => {
       window.calls = [];
+      window.requestedIcons = [];
+      window.localIconRequests = [];
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 8;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#0288d1';
+      context.fillRect(0, 0, 8, 8);
+      const icon = canvas.toDataURL();
+      const imageSource = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', { ...imageSource, set(value) {
+        if (value.startsWith('ksu://icon/')) {
+          window.localIconRequests.push(value);
+          value = value.endsWith('/com.example.draw') ? icon : 'data:image/png;base64,invalid';
+        }
+        imageSource.set.call(this, value);
+      } });
       // An IME can shrink and pan the visual viewport without resizing the layout viewport.
       const viewport = window.visualViewport;
       window.setVisibleHeight = (height, offsetTop) => {
@@ -36,7 +52,12 @@ async function run() {
       let storedProfile = profile;
       const originalSetTimeout = window.setTimeout.bind(window);
       window.setTimeout = (fn, milliseconds, ...args) => originalSetTimeout(fn, milliseconds === 15000 ? 80 : milliseconds, ...args);
-      window.ksu = { getPackagesInfo: ids => JSON.parse(ids).flatMap(packageName => {
+      window.ksu = { pm: () => ({}), getPackagesIcons: (ids, size) => {
+        const packages = JSON.parse(ids);
+        window.requestedIcons.push(...packages);
+        if (size !== 64) return '[]';
+        return JSON.stringify(packages.map(packageName => ({ packageName, icon: packageName === 'com.example.tools' ? icon : '' })));
+      }, getPackagesInfo: ids => JSON.parse(ids).flatMap(packageName => {
         const label = { 'com.example.tools': '工具箱', 'com.example.detect': 'Device Finder' }[packageName];
         return label ? [{ packageName, label }] : [];
       }), exec(command, options, callback) {
@@ -131,7 +152,7 @@ async function run() {
         inFlow: box.top >= input.getBoundingClientRect().bottom && box.bottom <= rateLabel.getBoundingClientRect().top,
         firstVisible: firstBox.top >= box.top && firstBox.bottom <= box.bottom && firstBox.bottom <= bottom,
         scrolls: list.scrollHeight > list.clientHeight && box.height < 160,
-        wraps: first.firstElementChild.getBoundingClientRect().height > list.children[2].firstElementChild.getBoundingClientRect().height,
+        wraps: first.querySelector('.app-suggestion-text > span').getBoundingClientRect().height > list.children[2].querySelector('.app-suggestion-text > span').getBoundingClientRect().height,
         fitsWidth: list.scrollWidth === list.clientWidth,
       };
     });
@@ -145,6 +166,8 @@ async function run() {
     assert.equal(await appInput.inputValue(), 'd');
     await appInput.fill('DEVICE FINDER');
     assert.equal(await appOptions.count(), 1);
+    await page.waitForFunction(() => window.localIconRequests.includes('ksu://icon/com.example.detect'));
+    assert.equal(await appOptions.locator('.app-suggestion-icon .app-icon').count(), 1);
     await appInput.press('ArrowDown');
     assert.equal(await appInput.getAttribute('aria-activedescendant'), await appOptions.first().getAttribute('id'));
     await appInput.press('Enter');
@@ -152,14 +175,22 @@ async function run() {
     assert.equal(await ruleDialog.isVisible(), true);
     assert.equal(await appList.isVisible(), false);
 
+    await appInput.fill('com.example.draw');
+    await appOptions.locator('.app-suggestion-icon img').waitFor();
+    assert.ok(await page.evaluate(() => window.localIconRequests.includes('ksu://icon/com.example.draw')));
+
     await appInput.fill('工具');
+    const toolsIcon = appOptions.locator('.app-suggestion-icon img');
+    await toolsIcon.waitFor();
+    assert.equal(await toolsIcon.evaluate(image => image.naturalWidth), 8);
     await appOptions.getByText('工具箱', { exact: true }).tap();
     assert.equal(await appInput.inputValue(), 'com.example.tools');
     assert.equal(await appList.isVisible(), false);
     assert.equal(await appInput.evaluate(input => document.activeElement === input), true);
     // Clicking the rate while suggestions are expanded must still work after relayout.
     await ruleDialog.getByRole('button', { name: '已安装应用' }).tap();
-    await appList.waitFor();
+    await toolsIcon.waitFor();
+    assert.equal(await page.evaluate(() => window.requestedIcons.filter(pkg => pkg === 'com.example.tools').length), 1);
     await page.locator('#app-rate-trigger').click();
     assert.equal(await appList.isVisible(), false);
     await page.keyboard.press('Home');
