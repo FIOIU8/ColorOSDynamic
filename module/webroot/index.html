@@ -91,9 +91,14 @@
   <dialog id="rule-dialog">
     <form id="rule-form" class="dialog-content">
       <h2 data-i="newRule">新增应用规则</h2>
-      <label for="app-input" data-i="packageName">应用包名</label>
-      <input id="app-input" list="installed-apps" required autocomplete="off" spellcheck="false" pattern="[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+" placeholder="com.example.app">
-      <datalist id="installed-apps"></datalist>
+      <label id="app-input-label" for="app-input" data-i="packageName">应用包名</label>
+      <div id="app-picker" class="app-picker">
+        <div class="app-picker-field">
+          <input id="app-input" role="combobox" aria-autocomplete="list" aria-controls="installed-apps" aria-expanded="false" required autocomplete="off" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+" placeholder="com.example.app">
+          <button id="app-list-toggle" class="app-list-toggle" type="button" tabindex="-1" aria-controls="installed-apps" aria-expanded="false" aria-label="已安装应用" data-label="installedApps"></button>
+        </div>
+        <div id="installed-apps" class="app-suggestions" role="listbox" aria-labelledby="app-input-label" tabindex="-1" hidden></div>
+      </div>
       <label for="app-rate" data-i="target">目标档</label><select id="app-rate"></select>
       <div class="actions"><button id="cancel-rule" type="button" data-i="cancel">取消</button><button class="primary" type="submit" data-i="add">添加</button></div>
     </form>

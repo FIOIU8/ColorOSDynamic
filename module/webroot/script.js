@@ -73,7 +73,7 @@ if (typeof document !== 'undefined') (() => {
     applied:'最近成功下发', enable:'启用触控优化', target:'目标档', global:'全局档', foreground:'前台应用', search:'搜索应用或包名', addRule:'新增规则', advanced:'高级设置',
     mappings:'触控命令映射', fallback:'为指定应用加强校准', watchlist:'应用包名（每行一个）', interval:'校准间隔（秒）', backend:'监听后端', shortcuts:'概览快捷操作',
     unsaved:'有未保存的修改', discard:'撤销', save:'保存', resync:'重新检测', refresh:'刷新状态', logs:'运行日志', loadLogs:'查看', copy:'复制', logEmpty:'日志按需读取',
-    newRule:'新增应用规则', packageName:'应用包名', cancel:'取消', add:'添加', leavePrompt:'离开此页前，保存或放弃修改。', remove:'移除', empty:'没有匹配的应用规则',
+    newRule:'新增应用规则', packageName:'应用包名', installedApps:'已安装应用', cancel:'取消', add:'添加', leavePrompt:'离开此页前，保存或放弃修改。', remove:'移除', empty:'没有匹配的应用规则',
     loading:'加载中', running:'运行中', paused:'息屏暂停', degraded:'降级运行', disabled:'已关闭', stopped:'服务未运行', starting:'启动中', stopping:'停止中', unknown:'未知',
     events:'事件监听', watchlistMode:'名单轮询', recovery:'监听恢复中', screen:'屏幕', awake:'亮屏', asleep:'息屏', mode:'检测方式', updated:'最后更新', reason:'诊断信息', release:'版本类型', official:'正式版',
     saved:'已保存', failed:'操作失败', config_invalid:'配置无效，请检查档位映射、包名和校准间隔', control_busy:'服务繁忙，请稍后重试', copied:'已复制', unavailable:'未找到日志',
@@ -86,7 +86,7 @@ if (typeof document !== 'undefined') (() => {
     applied:'Last applied', enable:'Enable touch optimization', target:'Target', global:'Global', foreground:'Foreground app', search:'Search apps or packages', addRule:'Add rule', advanced:'Advanced',
     mappings:'Touch command mappings', fallback:'Recheck selected apps more often', watchlist:'Package names, one per line', interval:'Recheck interval (seconds)', backend:'Listener backend', shortcuts:'Overview actions',
     unsaved:'Unsaved changes', discard:'Discard', save:'Save', resync:'Detect again', refresh:'Refresh status', logs:'Service log', loadLogs:'View', copy:'Copy', logEmpty:'Load logs on demand',
-    newRule:'New app rule', packageName:'Package name', cancel:'Cancel', add:'Add', leavePrompt:'Save or discard your changes before leaving.', remove:'Remove', empty:'No matching rules',
+    newRule:'New app rule', packageName:'Package name', installedApps:'Installed apps', cancel:'Cancel', add:'Add', leavePrompt:'Save or discard your changes before leaving.', remove:'Remove', empty:'No matching rules',
     loading:'Loading', running:'Running', paused:'Screen off', degraded:'Degraded', disabled:'Off', stopped:'Service stopped', starting:'Starting', stopping:'Stopping', unknown:'Unknown',
     events:'Event stream', watchlistMode:'Watchlist polling', recovery:'Reconnecting', screen:'Screen', awake:'On', asleep:'Off', mode:'Detection', updated:'Last updated', reason:'Diagnostics', release:'Release', official:'Official',
     saved:'Saved', failed:'Operation failed', config_invalid:'Invalid profile. Check rate mappings, package names, and interval.', control_busy:'Service is busy. Try again shortly.', copied:'Copied', unavailable:'No log entries',
@@ -521,22 +521,143 @@ if (typeof document !== 'undefined') (() => {
       renderStatus();
     } catch { /* Package labels are optional. */ }
   }
-  async function loadApps() {
+  const ruleDialog = $('rule-dialog');
+  const appInput = $('app-input');
+  const appPicker = $('app-picker');
+  const appList = $('installed-apps');
+  const appListToggle = $('app-list-toggle');
+  let installedApps = [], suggestionsRequested = false, activeApp;
+  function positionRuleDialog() {
+    const viewport = window.visualViewport;
+    ruleDialog.style.setProperty('--rule-viewport-top', `${viewport?.offsetTop || 0}px`);
+    ruleDialog.style.setProperty('--rule-viewport-height', `${viewport?.height || window.innerHeight}px`);
+  }
+  function setAppListVisible(visible) {
+    appList.hidden = !visible;
+    appInput.setAttribute('aria-expanded', String(visible));
+    appListToggle.setAttribute('aria-expanded', String(visible));
+  }
+  function highlightApp(option) {
+    activeApp?.setAttribute('aria-selected', 'false');
+    activeApp = option;
+    if (!option) {
+      appInput.removeAttribute('aria-activedescendant');
+      return;
+    }
+    option.setAttribute('aria-selected', 'true');
+    appInput.setAttribute('aria-activedescendant', option.id);
+    const bounds = option.getBoundingClientRect();
+    const top = appList.getBoundingClientRect().top + appList.clientTop;
+    const bottom = top + appList.clientHeight;
+    if (bounds.top < top || bounds.height > appList.clientHeight) appList.scrollTop += bounds.top - top;
+    else if (bounds.bottom > bottom) appList.scrollTop += bounds.bottom - bottom;
+  }
+  function closeAppList() {
+    suggestionsRequested = false;
+    highlightApp();
+    setAppListVisible(false);
+  }
+  function renderAppList(keepHighlight = false) {
+    if (!ruleDialog.open || !suggestionsRequested) return;
+    const previous = keepHighlight ? activeApp?.dataset.pkg : null;
+    const query = appInput.value.trim().toLowerCase();
+    const items = [];
+    let nextActive;
+    for (const pkg of installedApps) {
+      const name = appName(pkg);
+      if (!pkg.toLowerCase().includes(query) && !name.toLowerCase().includes(query)) continue;
+      const option = document.createElement('div');
+      option.id = `app-suggestion-${items.length}`;
+      option.className = 'app-suggestion';
+      option.dataset.pkg = pkg;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      const packageText = document.createElement('span');
+      packageText.textContent = pkg;
+      option.append(packageText);
+      if (name !== pkg) {
+        const label = document.createElement('small');
+        label.textContent = name;
+        option.append(label);
+      }
+      if (pkg === previous) nextActive = option;
+      items.push(option);
+    }
+    appList.replaceChildren(...items);
+    setAppListVisible(items.length > 0);
+    if (!nextActive) appList.scrollTop = 0;
+    highlightApp(nextActive);
+  }
+  function loadApps() {
     if (!appJob) appJob = exec('apps').then(async text => {
-      const ids = text.split('\n').map(line => line.replace(/^package:/, '').trim()).filter(pkg => packagePattern.test(pkg)).sort();
-      populateApps(ids);
-      await loadNames(ids);
-      populateApps(ids);
+      installedApps = [...new Set(text.split('\n').map(line => line.replace(/^package:/, '').trim()).filter(pkg => packagePattern.test(pkg)))].sort();
+      renderAppList(true);
+      await loadNames(installedApps);
+      renderAppList(true);
     }).catch(() => { appJob = undefined; });
     return appJob;
   }
-  function populateApps(ids) {
-    $('installed-apps').replaceChildren(...ids.map(pkg => {
-      const option = document.createElement('option');
-      option.value = pkg;
-      if (appName(pkg) !== pkg) option.label = appName(pkg);
-      return option;
-    }));
+  function chooseApp(option) {
+    appInput.value = option.dataset.pkg;
+    closeAppList();
+    appInput.focus({ preventScroll: true });
+  }
+  function bindAppPicker() {
+    const showList = () => { suggestionsRequested = true; renderAppList(); };
+    appInput.addEventListener('input', event => { if (!event.isComposing) showList(); });
+    appInput.addEventListener('compositionend', showList);
+    appInput.addEventListener('keydown', event => {
+      if (event.isComposing || event.keyCode === 229) return;
+      switch (event.key) {
+        case 'ArrowDown':
+        case 'ArrowUp': {
+          if (appList.hidden) showList();
+          if (appList.hidden) return;
+          const down = event.key === 'ArrowDown';
+          const next = activeApp
+            ? (down ? activeApp.nextElementSibling : activeApp.previousElementSibling)
+            : (down ? appList.firstElementChild : appList.lastElementChild);
+          if (next) highlightApp(next);
+          break;
+        }
+        case 'Enter':
+          if (!activeApp) return;
+          chooseApp(activeApp);
+          break;
+        case 'Escape':
+          if (appList.hidden) return;
+          closeAppList();
+          break;
+        case 'Tab': closeAppList(); return;
+        default: return;
+      }
+      event.preventDefault();
+    });
+    appListToggle.addEventListener('mousedown', event => event.preventDefault());
+    appListToggle.onclick = () => {
+      if (suggestionsRequested) closeAppList();
+      else showList();
+      appInput.focus({ preventScroll: true });
+    };
+    appList.addEventListener('mousedown', event => {
+      if (event.target.closest('.app-suggestion')) event.preventDefault();
+    });
+    appList.onclick = event => {
+      const option = event.target.closest('.app-suggestion');
+      if (option) chooseApp(option);
+    };
+    // Dismiss after the click target is known, before its handler opens another menu.
+    ruleDialog.addEventListener('click', event => { if (!appPicker.contains(event.target)) closeAppList(); }, true);
+    ruleDialog.addEventListener('cancel', event => {
+      if (appList.hidden) return;
+      event.preventDefault();
+      closeAppList();
+    });
+    ruleDialog.addEventListener('close', () => { if (!ruleDialog.open) closeAppList(); });
+    const reposition = () => { if (ruleDialog.open) positionRuleDialog(); };
+    window.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('scroll', reposition);
   }
   function refreshStatus() {
     if (statusJob) return statusJob;
@@ -626,6 +747,7 @@ if (typeof document !== 'undefined') (() => {
   }
   function bind() {
     bindDropdown();
+    bindAppPicker();
     for (const tab of document.querySelectorAll('[data-page]')) tab.onclick = () => navigate(tab.dataset.page);
     bindDraft('global-rate', 'global');
     bindDraft('rates-text', 'rates');
@@ -641,19 +763,22 @@ if (typeof document !== 'undefined') (() => {
     $('preferences').onclick = () => $('prefs-dialog').showModal();
     $('add-rule').onclick = () => {
       if (!profile) return;
-      $('app-input').value = '';
+      appInput.value = '';
+      closeAppList();
       options($('app-rate'), profile.global);
-      $('rule-dialog').showModal();
+      ruleDialog.scrollTop = 0;
+      positionRuleDialog();
+      ruleDialog.showModal();
       loadApps();
     };
-    $('cancel-rule').onclick = () => $('rule-dialog').close();
+    $('cancel-rule').onclick = () => ruleDialog.close();
     $('rule-form').onsubmit = event => {
       event.preventDefault();
-      const pkg = $('app-input').value.trim();
+      const pkg = appInput.value.trim();
       if (!packagePattern.test(pkg) || !$('app-rate').value) return;
       profile.rules.set(pkg, $('app-rate').value);
       if (packages.get(pkg)) profile.names.set(pkg, packages.get(pkg));
-      $('rule-dialog').close();
+      ruleDialog.close();
       renderRules();
       updateDirty();
     };

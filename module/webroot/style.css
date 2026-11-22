@@ -435,6 +435,56 @@ dialog::backdrop { background: var(--overlay); }
 .dialog-content p { color: var(--on-surface-variant); }
 .dialog-content .actions { justify-content: flex-end; margin-top: 6px; }
 
+#rule-dialog[open] {
+  position: fixed;
+  top: calc(var(--rule-viewport-top, 0px) + var(--rule-viewport-height, 100vh) / 2);
+  bottom: auto;
+  margin-block: 0;
+  max-height: calc(var(--rule-viewport-height, 100vh) - 24px);
+  transform: translateY(-50%);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.app-picker-field { position: relative; }
+#app-input { width: 100%; padding-inline-end: 52px; }
+.app-list-toggle {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  padding: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--on-surface);
+}
+.app-list-toggle:focus-visible { outline-offset: -4px; }
+.app-suggestions {
+  margin-top: 6px;
+  max-height: clamp(56px, calc(var(--rule-viewport-height, 100vh) * .35), 160px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-bright);
+}
+.app-suggestion {
+  display: grid;
+  align-content: center;
+  min-height: 48px;
+  padding: 8px 12px;
+  font-size: .875rem;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.app-suggestion + .app-suggestion { border-top: 1px solid var(--outline-variant); }
+.app-suggestion small { color: var(--on-surface-variant); }
+@media (hover: hover) {
+  .app-suggestion:hover { background: var(--surface-high); }
+}
+.app-suggestion[aria-selected="true"] { background: var(--primary-container); color: var(--on-primary-container); }
+
 /* Shared select trigger and anchored menu. */
 .dropdown-trigger {
   display: inline-flex;
@@ -450,7 +500,7 @@ dialog::backdrop { background: var(--overlay); }
   text-align: start;
 }
 .dropdown-trigger span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.dropdown-trigger::after {
+.dropdown-trigger::after, .app-list-toggle::after {
   content: "";
   width: 8px;
   height: 8px;
@@ -462,7 +512,7 @@ dialog::backdrop { background: var(--overlay); }
   transition: transform var(--motion);
 }
 .dropdown-trigger[aria-expanded="true"] { border-radius: 12px; background: var(--primary-container); color: var(--on-primary-container); }
-.dropdown-trigger[aria-expanded="true"]::after { transform: translateY(4px) rotate(225deg); }
+.dropdown-trigger[aria-expanded="true"]::after, .app-list-toggle[aria-expanded="true"]::after { transform: translateY(4px) rotate(225deg); }
 .inline .dropdown-trigger, .global-control .dropdown-trigger { min-width: min(100%, 108px); }
 .rule-row .dropdown-trigger { max-width: 106px; padding-inline: 10px; gap: 8px; }
 #app-rate-trigger { width: 100%; }
