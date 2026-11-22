@@ -117,7 +117,7 @@ show_status() {
         if read_owner; then printf 'stopping=1\n'; elif [ -f "$RUN/stop.status" ]; then cat "$RUN/stop.status"; fi
         return 0
     fi
-    preferred=$(profile_backend "$CONFIG")
+    preferred=$(module_edition)
     printf 'preferred_backend=%s\n' "$preferred"
     if ! read_owner; then
         printf 'state=stopped\n'

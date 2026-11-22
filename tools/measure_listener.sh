@@ -119,6 +119,7 @@ for backend in shell rust; do
     while [ "$run" -le "$RUNS" ]; do
         stop_service
         write_profile "$backend"
+        printf 'edition=%s\n' "$backend" > module/edition.conf
         : > queries
         : > touch_calls
         ctl enable

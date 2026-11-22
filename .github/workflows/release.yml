@@ -28,7 +28,7 @@ jobs:
           cargo clippy --locked --all-targets --manifest-path native/Cargo.toml -- -D warnings
           cargo test --locked --manifest-path native/Cargo.toml
 
-      - name: Build experimental arm64 Android worker
+      - name: Build Rust arm64 Android worker
         run: |
           rustup target add aarch64-linux-android
           export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
@@ -36,15 +36,15 @@ jobs:
 
       - name: Build and verify both installable ZIPs
         id: package
-        run: bash tools/package_module.sh "$GITHUB_SHA" --experimental native/target/aarch64-linux-android/release/touch-listener
+        run: bash tools/package_module.sh "$GITHUB_SHA" --rust native/target/aarch64-linux-android/release/touch-listener
 
       - name: Create draft release with ZIP
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.package.outputs.tag }}
-          ASSET: ${{ steps.package.outputs.asset }}
-          EXPERIMENTAL_ASSET: ${{ steps.package.outputs.experimental_asset }}
+          SHELL_ASSET: ${{ steps.package.outputs.shell_asset }}
+          RUST_ASSET: ${{ steps.package.outputs.rust_asset }}
         run: |
           releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$TAG\") | .id")
@@ -56,11 +56,11 @@ jobs:
           fi
 
           notes=$(printf '%s\n\n%s\n\n%s' \
-            '**非正式版（Unofficial）**：可能随时改动或撤回，不保证稳定性。' \
+            '**正式版**：模块会调用厂商触控 HAL 指令并修改系统运行状态，升级前请先备份当前可用版本。' \
             '作者：FIOIU8' \
-            "Install \`$(basename "$ASSET")\` from Assets in your module manager. The optional arm64 test ZIP lets you select the Rust listener in WebUI.")
-          release_url=$(gh release create "$TAG" "$ASSET" "$EXPERIMENTAL_ASSET" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease \
-            --title "ColorOSDynamic $TAG（非正式版）" \
+            "Install \`$(basename "$SHELL_ASSET")\` for the Shell backend, or \`$(basename "$RUST_ASSET")\` for the Rust backend (arm64-v8a only). The two packages are independent; install only one.")
+          release_url=$(gh release create "$TAG" "$SHELL_ASSET" "$RUST_ASSET" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+            --title "ColorOSDynamic $TAG（正式版）" \
             --notes "$notes")
-          printf 'Draft release: %s\n\nInstaller: \`%s\`\n' "$release_url" "$(basename "$ASSET")" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Draft release: %s\n\nShell: \`%s\`\nRust: \`%s\`\n' "$release_url" "$(basename "$SHELL_ASSET")" "$(basename "$RUST_ASSET")" >> "$GITHUB_STEP_SUMMARY"

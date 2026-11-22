@@ -3,6 +3,6 @@ name=ColorOS 触控采样率优化
 version=1.0.0
 versionCode=1
 author=FIOIU8
-description=非正式版 · 按应用调整触控采样率 · 事件监听与息屏暂停 · 默认关闭
+description=正式版 · 按应用调整触控采样率 · 事件监听与息屏暂停 · 默认关闭
 homepage=https://github.com/FIOIU8/ColorOSDynamic
 support=https://github.com/FIOIU8/ColorOSDynamic/issues

@@ -7,7 +7,12 @@ cd "$BASE"
 export COLOROS_RUNTIME_DIR="$BASE/runtime" COLOROS_SHELL=/system/bin/sh
 export TOUCH_FIXTURE_DIR="$BASE" PATH="$BASE/mock:$PATH"
 # The harness decides which binary to test; release builds still accept arm64 only.
-[ ! -f module/bin/touch-listener ] || export COLOROS_NATIVE_ABI_OK=1
+if [ -f module/bin/touch-listener ]; then
+    printf 'edition=rust\n' > module/edition.conf
+    export COLOROS_NATIVE_ABI_OK=1
+else
+    printf 'edition=shell\n' > module/edition.conf
+fi
 mkdir -p mock
 cat > mock/logcat <<'SH'
 #!/system/bin/sh
@@ -76,10 +81,6 @@ ctl config > before
 [ "$(grep -F 'fallback_method=' before)" = fallback_method=polling ] || fail migration_method
 if ctl save 'bm90IHZhbGlk'; then fail invalid_config_accepted; fi
 ctl config | cmp - before || fail invalid_config_changed_file
-if [ -f module/bin/touch-listener ]; then
-    sed 's/backend=shell/backend=rust/' before > experiment
-    ctl save "$(base64 experiment | tr -d '\n')"
-fi
 if [ "${TOUCH_TEST_RUST_FAIL:-0}" = 1 ] || [ "${TOUCH_TEST_RUST_BROKEN:-0}" = 1 ]; then
     [ -f module/bin/touch-listener ] || fail native_binary_missing
     cat > module/bin/touch-listener <<'SH'
@@ -92,21 +93,21 @@ fi
 ctl enable
 ctl enable
 if [ "${TOUCH_TEST_RUST_FAIL:-0}" = 1 ]; then
+    expect backend=rust
     expect backend_error=rust_failed
-    expect backend=shell
     ctl disable
     expect enabled=0
-    tap 'Repeated native startup failures fall back to Shell'
+    tap 'Repeated native startup failures stay on Rust'
     exit 0
 fi
 if [ "${TOUCH_TEST_RUST_BROKEN:-0}" = 1 ]; then
     expect backend_error=rust_start_failed
     grep -F 'native_error=spawn' runtime/touch.log >/dev/null || fail native_error_log
+    expect backend=rust
     expect backend_error=rust_failed
-    expect backend=shell
     ctl disable
     expect enabled=0
-    tap 'Native startup failure reason is shown before falling back'
+    tap 'Native startup failure stays on Rust and reports the reason'
     exit 0
 fi
 expect state=running

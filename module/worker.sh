@@ -344,10 +344,9 @@ worker_main() {
     local seen_awake seen_asleep retry_delay=1 stopping=0 rust_failures=0 screen_hint confirmed native_error=
     worker_start=$(proc_start "$$") || return 1
     load_profile || { log_message error=config_invalid; return 1; }
-    preferred=$configured_backend
+    preferred=$(module_edition)
     backend=$preferred
     if [ "$backend" = rust ] && [ "$(rust_capability)" != 1 ]; then
-        backend=shell
         backend_error=rust_unavailable
     fi
     exec 3<> "$SESSION/inbox"
@@ -370,7 +369,6 @@ worker_main() {
             if [ "$backend" = rust ]; then
                 rust_failures=$((rust_failures + 1))
                 if [ "$rust_failures" -ge 2 ]; then
-                    backend=shell
                     backend_error=rust_failed
                 elif [ "$reader_announced" = 0 ]; then
                     backend_error=rust_start_failed
@@ -388,7 +386,8 @@ worker_main() {
                 identity_matches "$logger_pid" "$logger_start"; then
                 stream_ready=1
                 stream_error=
-                case "$backend_error" in rust_start_failed) backend_error= ;; esac
+                rust_failures=0
+                case "$backend_error" in rust_start_failed|rust_failed|rust_unavailable) backend_error= ;; esac
                 sync_screen force
                 worker_publish
             elif [ "$((SECONDS - listener_started))" -ge 5 ]; then

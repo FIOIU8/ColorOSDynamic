@@ -84,16 +84,7 @@ async function run() {
     assert.equal(await page.locator('#shortcut-action-0-trigger').evaluate(button => document.activeElement === button), true);
     await page.locator('#shortcut-rate-0-trigger').click();
     await menu.getByRole('option', { name: '125 Hz' }).click();
-    await page.locator('#backend-trigger').click();
-    assert.equal(await menu.getByRole('option', { name: 'Shell' }).getAttribute('aria-selected'), 'true');
-    const bounds = await menu.boundingBox();
-    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320 && bounds.y >= 0 && bounds.y + bounds.height <= 780);
-    await page.mouse.click(2, 2);
-    await menu.waitFor({ state: 'hidden' });
-    await page.locator('#backend-trigger').click();
-    await page.evaluate(() => history.back());
-    await menu.waitFor({ state: 'hidden' });
-    assert.equal(await page.locator('#rules').isVisible(), true);
+    assert.equal(await page.locator('#backend').count(), 0);
     await page.locator('#advanced summary').click();
     await page.locator('#save').click();
     await page.locator('#save-bar').waitFor({ state: 'hidden' });

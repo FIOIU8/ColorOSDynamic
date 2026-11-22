@@ -11,7 +11,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD = (
-    "module.prop", "customize.sh", "service.sh", "uninstall.sh", "profile.sh", "worker.sh",
+    "module.prop", "edition.conf", "customize.sh", "service.sh", "uninstall.sh", "profile.sh", "worker.sh",
     "app_names.conf", "monitor_config.conf", "rate_code.conf", "touch_enabled.flag", "touch_opt.conf",
     "webroot/index.html", "webroot/script.js", "webroot/style.css",
 )
@@ -44,7 +44,7 @@ def unix_mode(name):
 def verify_arm64(filename):
     binary = filename.read_bytes()
     if not (binary[:6] == b"\x7fELF\x02\x01" and binary[18:20] == b"\xb7\x00" and b"/system/bin/linker64\0" in binary):
-        raise ValueError("Experimental worker must be an arm64 Android ELF")
+        raise ValueError("Rust worker must be an arm64 Android ELF")
     return binary
 
 
@@ -70,7 +70,8 @@ def main():
     parser.add_argument("dist", nargs="?", default="dist", type=Path)
     parser.add_argument("--worktree", action="store_true")
     parser.add_argument("--output", type=Path, help="Override the output directory")
-    parser.add_argument("--experimental", type=Path, metavar="ANDROID_ARM64_ELF")
+    parser.add_argument("--rust", type=Path, metavar="ANDROID_ARM64_ELF",
+                        help="also build the Rust edition from this arm64 binary")
     args = parser.parse_args()
     items = dict(payload_from("--worktree" if args.worktree else args.ref))
     items = {name: content.replace(b"\r\n", b"\n") for name, content in items.items()}
@@ -79,10 +80,12 @@ def main():
     if not version or not re.search(r"^versionCode=[1-9][0-9]*$", prop, re.MULTILINE):
         parser.error("module.prop needs a version and positive versionCode")
     version = version[1]
-    assets = [(f"ColorOSDynamic-v{version}.zip", items)]
-    if args.experimental:
-        native = verify_arm64(args.experimental)
-        assets.append((f"ColorOSDynamic-v{version}-rust-arm64-experimental.zip", {**items, "bin/touch-listener": native}))
+    shell_items = {**items, "edition.conf": b"edition=shell\n"}
+    assets = [(f"ColorOSDynamic-v{version}-shell.zip", shell_items)]
+    if args.rust:
+        native = verify_arm64(args.rust)
+        rust_items = {**shell_items, "bin/touch-listener": native, "edition.conf": b"edition=rust\n"}
+        assets.append((f"ColorOSDynamic-v{version}-rust-arm64.zip", rust_items))
     output_dir = args.output or args.dist
     output_dir.mkdir(parents=True, exist_ok=True)
     created = []
@@ -93,9 +96,9 @@ def main():
         print(destination)
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, "a", encoding="utf-8", newline="\n") as stream:
-            print(f"tag=v{version}\nasset={created[0]}", file=stream)
+            print(f"tag=v{version}\nshell_asset={created[0]}", file=stream)
             if len(created) == 2:
-                print(f"experimental_asset={created[1]}", file=stream)
+                print(f"rust_asset={created[1]}", file=stream)
 
 
 if __name__ == "__main__":

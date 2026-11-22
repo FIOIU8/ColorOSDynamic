@@ -75,7 +75,7 @@ if (typeof document !== 'undefined') (() => {
     unsaved:'有未保存的修改', discard:'撤销', save:'保存', resync:'重新检测', refresh:'刷新状态', logs:'运行日志', loadLogs:'查看', copy:'复制', logEmpty:'日志按需读取',
     newRule:'新增应用规则', packageName:'应用包名', cancel:'取消', add:'添加', leavePrompt:'离开此页前，保存或放弃修改。', remove:'移除', empty:'没有匹配的应用规则',
     loading:'加载中', running:'运行中', paused:'息屏暂停', degraded:'降级运行', disabled:'已关闭', stopped:'服务未运行', starting:'启动中', stopping:'停止中', unknown:'未知',
-    events:'事件监听', watchlistMode:'名单轮询', recovery:'监听恢复中', screen:'屏幕', awake:'亮屏', asleep:'息屏', mode:'检测方式', updated:'最后更新', reason:'诊断信息', release:'版本类型', unofficial:'非正式版',
+    events:'事件监听', watchlistMode:'名单轮询', recovery:'监听恢复中', screen:'屏幕', awake:'亮屏', asleep:'息屏', mode:'检测方式', updated:'最后更新', reason:'诊断信息', release:'版本类型', official:'正式版',
     saved:'已保存', failed:'操作失败', config_invalid:'配置无效，请检查档位映射、包名和校准间隔', control_busy:'服务繁忙，请稍后重试', copied:'已复制', unavailable:'未找到日志',
     calcRule:'编辑规则', none:'无', turnOn:'开启服务', turnOff:'关闭服务', setGlobal:'切换全局档', foreground_unknown:'无法确认前台应用', event_stream_lost:'事件流中断，正在重连', apply_failed:'触控命令失败或超时',
     power_unknown:'无法确认屏幕状态', rust_unavailable:'此安装包或设备不支持 Rust 监听', rust_start_failed:'Rust 监听无法启动，正在重试', rust_failed:'Rust 监听启动失败，已切回 Shell', worker_exited:'工作进程已退出，正在重试',
@@ -88,7 +88,7 @@ if (typeof document !== 'undefined') (() => {
     unsaved:'Unsaved changes', discard:'Discard', save:'Save', resync:'Detect again', refresh:'Refresh status', logs:'Service log', loadLogs:'View', copy:'Copy', logEmpty:'Load logs on demand',
     newRule:'New app rule', packageName:'Package name', cancel:'Cancel', add:'Add', leavePrompt:'Save or discard your changes before leaving.', remove:'Remove', empty:'No matching rules',
     loading:'Loading', running:'Running', paused:'Screen off', degraded:'Degraded', disabled:'Off', stopped:'Service stopped', starting:'Starting', stopping:'Stopping', unknown:'Unknown',
-    events:'Event stream', watchlistMode:'Watchlist polling', recovery:'Reconnecting', screen:'Screen', awake:'On', asleep:'Off', mode:'Detection', updated:'Last updated', reason:'Diagnostics', release:'Release', unofficial:'Unofficial',
+    events:'Event stream', watchlistMode:'Watchlist polling', recovery:'Reconnecting', screen:'Screen', awake:'On', asleep:'Off', mode:'Detection', updated:'Last updated', reason:'Diagnostics', release:'Release', official:'Official',
     saved:'Saved', failed:'Operation failed', config_invalid:'Invalid profile. Check rate mappings, package names, and interval.', control_busy:'Service is busy. Try again shortly.', copied:'Copied', unavailable:'No log entries',
     calcRule:'Edit rules', none:'None', turnOn:'Enable service', turnOff:'Disable service', setGlobal:'Set global rate', foreground_unknown:'Foreground app could not be confirmed', event_stream_lost:'Event stream interrupted. Reconnecting.', apply_failed:'Touch command failed or timed out',
     power_unknown:'Screen state could not be confirmed', rust_unavailable:'Rust is unavailable on this build or device', rust_start_failed:'Rust listener could not start. Retrying.', rust_failed:'Rust listener failed. Switched to Shell.', worker_exited:'Worker stopped. Retrying.',
@@ -343,7 +343,7 @@ if (typeof document !== 'undefined') (() => {
     document.querySelector('meta[name="theme-color"]').content = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
     for (const element of document.querySelectorAll('[data-i]')) element.textContent = t(element.dataset.i);
     for (const element of document.querySelectorAll('[data-label]')) element.setAttribute('aria-label', t(element.dataset.label));
-    for (const id of ['theme', 'language', 'backend', 'global-rate', 'app-rate']) syncDropdown($(id));
+    for (const id of ['theme', 'language', 'global-rate', 'app-rate']) syncDropdown($(id));
     $('search').placeholder = t('search');
     if (rawLog) $('log-output').textContent = rawLog;
     renderRules();
@@ -409,8 +409,6 @@ if (typeof document !== 'undefined') (() => {
     $('fallback-enabled').checked = profile.fallback;
     $('fallback-items').value = profile.watch;
     $('poll-interval').value = profile.interval;
-    $('backend').value = profile.backend;
-    syncDropdown($('backend'));
     renderRules();
     renderShortcuts();
     updateDirty();
@@ -428,11 +426,10 @@ if (typeof document !== 'undefined') (() => {
     const name = status.foreground_name || appName(pkg);
     $('foreground').textContent = name || (status.screen === 'asleep' ? t('paused') : '—');
     $('package').textContent = name && name !== pkg ? pkg || '' : '';
-    $('backend-row').hidden = status.experimental !== '1' && profile?.backend !== 'rust';
     $('resync').disabled = busy || status.enabled !== '1';
     const rows = [
       ['state', t(state)], ['backend', status.backend || status.preferred_backend || '—'],
-      ['release', t('unofficial')],
+      ['release', t('official')],
       ['mode', status.mode ? t(status.mode === 'watchlist' ? 'watchlistMode' : status.mode) : '—'],
       ['screen', status.screen ? t(status.screen) : '—'],
       ['updated', status.updated ? new Date(Number(status.updated) * 1000).toLocaleString(document.documentElement.lang) : '—'],
@@ -635,7 +632,6 @@ if (typeof document !== 'undefined') (() => {
     bindDraft('fallback-enabled', 'fallback', 'checked');
     bindDraft('fallback-items', 'watch');
     bindDraft('poll-interval', 'interval');
-    bindDraft('backend', 'backend');
     $('search').oninput = renderRules;
     $('save').onclick = save;
     $('discard').onclick = discard;

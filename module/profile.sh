@@ -49,13 +49,13 @@ validate_profile() {
     ' "$1"
 }
 
-profile_backend() {
-    local first second
-    if { IFS= read -r first && IFS= read -r second; } 2>/dev/null < "$1" && [ "$second" = backend=rust ]; then
-        printf 'rust\n'
-    else
-        printf 'shell\n'
-    fi
+module_edition() {
+    local edition
+    edition=$(awk -F= '$1 == "edition" { print $2; exit }' "$MODDIR/edition.conf" 2>/dev/null)
+    case "$edition" in
+        rust) printf 'rust\n' ;;
+        *) printf 'shell\n' ;;
+    esac
 }
 
 ensure_profile() {
@@ -63,7 +63,7 @@ ensure_profile() {
     local temp
     temp=$(mktemp "$MODDIR/.profile.XXXXXX") || return 1
     if {
-        printf 'schema=1\nbackend=shell\n[rules]\n'
+        printf 'schema=1\nbackend=%s\n[rules]\n' "$(module_edition)"
         cat "$MODDIR/touch_opt.conf" && printf '\n[rates]\n' && cat "$MODDIR/rate_code.conf" &&
         printf '\n[monitor]\n' && sed -e 's/^fallback_method=observer$/fallback_method=polling/' -e 's/^fallback_package=/fallback_app=/' "$MODDIR/monitor_config.conf" &&
         printf '\n[names]\n' && cat "$MODDIR/app_names.conf"
@@ -120,6 +120,9 @@ load_profile() {
         esac
     done < "$temp"
     rm -f "$temp"
+    # The installed package is locked to its build edition; the profile keeps
+    # a backend line for schema compatibility but cannot switch it at runtime.
+    configured_backend=$(module_edition)
 }
 
 # Last matching entry wins, as it does in the configuration editor.
