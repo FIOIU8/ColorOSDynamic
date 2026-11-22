@@ -75,10 +75,44 @@
     </section>
     <p id="message" class="message" role="status" hidden></p>
   </main>
+  <!-- Lucide icons: house, list-checks, activity.
+       Copyright (c) 2026 Lucide Icons and Contributors
+       Permission to use, copy, modify, and/or distribute this software for any
+       purpose with or without fee is hereby granted, provided that the above
+       copyright notice and this permission notice appear in all copies.
+       THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+       WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+       MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+       ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+       WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+       ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+       OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. -->
   <nav class="tabbar" data-label="nav" aria-label="主导航">
-    <button type="button" data-page="overview" aria-current="page"><span class="tab-indicator" aria-hidden="true"><span class="symbol overview-icon"></span></span><span data-i="overview">概览</span></button>
-    <button type="button" data-page="rules"><span class="tab-indicator" aria-hidden="true"><span class="symbol rules-icon"></span></span><span data-i="rules">规则</span></button>
-    <button type="button" data-page="diagnostics"><span class="tab-indicator" aria-hidden="true"><span class="symbol diagnostics-icon"></span></span><span data-i="diagnostics">诊断</span></button>
+    <button type="button" data-page="overview" aria-current="page">
+      <span class="tab-indicator" aria-hidden="true">
+        <svg class="tab-icon" viewBox="0 0 24 24" focusable="false">
+          <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/>
+          <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+      </span>
+      <span data-i="overview">概览</span>
+    </button>
+    <button type="button" data-page="rules">
+      <span class="tab-indicator" aria-hidden="true">
+        <svg class="tab-icon" viewBox="0 0 24 24" focusable="false">
+          <path d="m3 17 2 2 4-4m-6-8 2 2 4-4M13 6h8m-8 6h8m-8 6h8"/>
+        </svg>
+      </span>
+      <span data-i="rules">规则</span>
+    </button>
+    <button type="button" data-page="diagnostics">
+      <span class="tab-indicator" aria-hidden="true">
+        <svg class="tab-icon" viewBox="0 0 24 24" focusable="false">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </span>
+      <span data-i="diagnostics">诊断</span>
+    </button>
   </nav>
   <dialog id="prefs-dialog">
     <form method="dialog" class="dialog-content">

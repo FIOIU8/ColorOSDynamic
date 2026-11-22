@@ -82,6 +82,15 @@ async function run() {
     await page.goto(url);
     await page.locator('#overview').getByText('示例应用', { exact: true }).waitFor();
     assert.equal(await page.locator('#applied').textContent(), '360');
+    const nav = page.getByRole('navigation', { name: '主导航' });
+    const navIcons = nav.locator('svg.tab-icon');
+    assert.equal(await navIcons.count(), 3);
+    assert.equal(await nav.getByRole('button', { name: '概览', exact: true }).getAttribute('aria-current'), 'page');
+    assert.ok(await navIcons.evaluateAll(icons => icons.every(icon => {
+      const box = icon.getBoundingClientRect();
+      const style = getComputedStyle(icon);
+      return box.width === 24 && box.height === 24 && style.stroke === style.color && icon.getBBox().width > 0;
+    })));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
     await page.waitForFunction(() => window.calls.filter(call => call === 'status').length >= 2);
     await page.evaluate(() => {
@@ -96,6 +105,7 @@ async function run() {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await page.locator('nav [data-page="rules"]').click();
+    assert.equal(await nav.getByRole('button', { name: '规则', exact: true }).getAttribute('aria-current'), 'page');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
     await page.locator('#advanced summary').click();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
