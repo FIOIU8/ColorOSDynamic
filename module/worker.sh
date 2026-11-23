@@ -289,7 +289,33 @@ sync_foreground() {
     local package
     next_focus=0
     package=$(foreground_snapshot) || package=
+    monotonic_cs; last_confirm_cs=$uptime
+    confirm_pending=0
     set_foreground "$package"
+}
+
+# One trailing check per burst corrects transitional focus events without
+# turning every log line into a dumpsys call.
+schedule_confirm() {
+    [ "$confirm_pending" = 0 ] || return 0
+    confirm_pending=1
+    monotonic_cs; confirm_start_cs=$uptime
+    if [ "$screen" != asleep ] &&
+        { [ "$next_focus" = 0 ] || [ "$next_focus" -gt "$((SECONDS + 1))" ]; }; then
+        next_focus=$((SECONDS + 1))
+    fi
+}
+
+request_foreground() {
+    local now
+    monotonic_cs
+    now=$uptime
+    if [ "$last_confirm_cs" = 0 ] ||
+        [ "$((now - last_confirm_cs))" -ge "$confirm_gap_cs" ]; then
+        sync_foreground
+    else
+        schedule_confirm
+    fi
 }
 
 set_screen() {
@@ -299,6 +325,7 @@ set_screen() {
         asleep)
             mode=paused
             next_focus=0
+            confirm_pending=0
             foreground=
             target=$global_rate
             if [ -n "$last_command" ]; then apply_target || true; fi
@@ -342,6 +369,13 @@ worker_main() {
     local backend preferred record wait_for deadline next_probe next_power next_focus next_retry
     local reader_announced listener_started logger_pid logger_start
     local seen_awake seen_asleep retry_delay=1 stopping=0 rust_failures=0 screen_hint confirmed native_error=
+    local confirm_pending=0 last_confirm_cs=0 confirm_start_cs=0 confirm_gap_cs previous_foreground=
+    local confirm_after_app
+    confirm_gap_cs=${TOUCH_CONFIRM_GAP_MS:-500}
+    case "$confirm_gap_cs" in ''|*[!0-9]*) confirm_gap_cs=500 ;; esac
+    confirm_gap_cs=$((confirm_gap_cs / 10))
+    confirm_after_app=${TOUCH_CONFIRM_AFTER_APP:-1}
+    case "$confirm_after_app" in 0|1) ;; *) confirm_after_app=1 ;; esac
     worker_start=$(proc_start "$$") || return 1
     load_profile || { log_message error=config_invalid; return 1; }
     preferred=$(module_edition)
@@ -358,27 +392,32 @@ worker_main() {
     next_focus=0
     worker_publish
     while :; do
-        if [ "$listening" = 1 ] && [ "$next_probe" -le "$SECONDS" ] && ! proc_start "$listener_pid" >/dev/null; then
-            wait "$listener_pid" 2>/dev/null || true
-            listener_pid=
-            retire_listener
-            listening=0
-            stream_ready=0
-            stream_error=event_stream_lost
-            log_message "error=$stream_error backend=$backend${native_error:+ native_error=$native_error}"
-            if [ "$backend" = rust ]; then
-                rust_failures=$((rust_failures + 1))
-                if [ "$rust_failures" -ge 2 ]; then
-                    backend_error=rust_failed
-                elif [ "$reader_announced" = 0 ]; then
-                    backend_error=rust_start_failed
+        if [ "$listening" = 1 ] && [ "$next_probe" -le "$SECONDS" ]; then
+            if ! proc_start "$listener_pid" >/dev/null; then
+                wait "$listener_pid" 2>/dev/null || true
+                listener_pid=
+                retire_listener
+                listening=0
+                stream_ready=0
+                stream_error=event_stream_lost
+                log_message "error=$stream_error backend=$backend${native_error:+ native_error=$native_error}"
+                if [ "$backend" = rust ]; then
+                    rust_failures=$((rust_failures + 1))
+                    if [ "$rust_failures" -ge 2 ]; then
+                        backend_error=rust_failed
+                    elif [ "$reader_announced" = 0 ]; then
+                        backend_error=rust_start_failed
+                    fi
                 fi
+                [ "$((SECONDS - listener_started))" -lt 30 ] || retry_delay=1
+                next_retry=$((SECONDS + retry_delay))
+                [ "$retry_delay" -ge 32 ] || retry_delay=$((retry_delay * 2))
+                sync_screen force
+                worker_publish
+            elif [ "$stream_ready" = 1 ]; then
+                # A connected FIFO can hide listener death, so probe even while paused.
+                next_probe=$((SECONDS + 5))
             fi
-            [ "$((SECONDS - listener_started))" -lt 30 ] || retry_delay=1
-            next_retry=$((SECONDS + retry_delay))
-            [ "$retry_delay" -ge 32 ] || retry_delay=$((retry_delay * 2))
-            sync_screen force
-            worker_publish
         fi
         if [ "$listening" = 1 ] && [ "$stream_ready" = 0 ] && [ "$next_probe" -le "$SECONDS" ]; then
             if [ "$reader_announced" = 1 ] &&
@@ -387,12 +426,13 @@ worker_main() {
                 stream_ready=1
                 stream_error=
                 rust_failures=0
+                next_probe=$((SECONDS + 5))
                 case "$backend_error" in rust_start_failed|rust_failed|rust_unavailable) backend_error= ;; esac
                 sync_screen force
                 worker_publish
             elif [ "$((SECONDS - listener_started))" -ge 5 ]; then
                 retire_listener
-                next_probe=0
+                next_probe=$((SECONDS + 1))
             else
                 next_probe=$((listener_started + 5))
             fi
@@ -403,14 +443,24 @@ worker_main() {
             sync_screen
             worker_publish
         fi
-        if [ "$next_focus" -gt 0 ] && [ "$SECONDS" -ge "$next_focus" ]; then sync_foreground; worker_publish; fi
-        # No periodic timer when safely paused on a verified, connected power stream.
+        if [ "$next_focus" -gt 0 ] && [ "$SECONDS" -ge "$next_focus" ]; then
+            if [ "$confirm_pending" = 1 ]; then
+                monotonic_cs
+                if [ "$((uptime - confirm_start_cs))" -lt "$confirm_gap_cs" ]; then
+                    next_focus=$((SECONDS + 1))
+                    continue
+                fi
+            fi
+            sync_foreground
+            worker_publish
+        fi
+        # No periodic power or focus query while safely paused on a verified stream.
         wait_for=0
         for deadline in "$next_power" "$next_focus"; do
             if [ "$deadline" -gt 0 ] && { [ "$wait_for" = 0 ] || [ "$deadline" -lt "$wait_for" ]; }; then wait_for=$deadline; fi
         done
         if [ "$listening" = 0 ] && { [ "$wait_for" = 0 ] || [ "$next_retry" -lt "$wait_for" ]; }; then wait_for=$next_retry; fi
-        if [ "$listening" = 1 ] && [ "$stream_ready" = 0 ] && { [ "$wait_for" = 0 ] || [ "$next_probe" -lt "$wait_for" ]; }; then wait_for=$next_probe; fi
+        if [ "$listening" = 1 ] && [ "$next_probe" -gt 0 ] && { [ "$wait_for" = 0 ] || [ "$next_probe" -lt "$wait_for" ]; }; then wait_for=$next_probe; fi
         if [ "$wait_for" = 0 ]; then
             IFS= read -r -u3 record || continue
         else
@@ -429,15 +479,16 @@ worker_main() {
                 error=
                 if [ "$screen" = asleep ]; then set_screen asleep; else sync_screen force; fi
                 ;;
-            @resync) sync_screen force ;;
+            @resync) next_probe=$SECONDS; sync_screen force ;;
             @ready)
                 reader_announced=1
                 next_probe=$((SECONDS + 1))
                 continue
                 ;;
             @lost)
-                next_probe=0
-                # The wrapper reports this only after reaping its event source.
+                next_probe=$SECONDS
+                # The wrapper reports this only after reaping its event source;
+                # probe immediately so the restart backoff starts without extra delay.
                 if [ -n "$listener_pid" ]; then wait "$listener_pid" 2>/dev/null || true; fi
                 continue
                 ;;
@@ -467,13 +518,22 @@ worker_main() {
                 fi
                 ;;
             @keyguard)
-                if [ "$screen" != asleep ]; then sync_foreground; fi
+                if [ "$screen" != asleep ]; then request_foreground; fi
                 ;;
             @app:*)
                 [ "$screen" != asleep ] || continue
-                if [ "$screen" = awake ]; then set_foreground "${record#@app:}"; else sync_foreground; fi
+                if [ "$screen" = awake ]; then
+                    previous_foreground=$foreground
+                    set_foreground "${record#@app:}"
+                    if [ "$confirm_after_app" = 1 ] && [ "$previous_foreground" != "$foreground" ]; then
+                        confirm_pending=0
+                        schedule_confirm
+                    fi
+                else
+                    request_foreground
+                fi
                 ;;
-            @focus|@conflict) [ "$screen" = asleep ] || sync_foreground ;;
+            @focus|@conflict) [ "$screen" = asleep ] || request_foreground ;;
             *) continue ;;
         esac
         worker_publish

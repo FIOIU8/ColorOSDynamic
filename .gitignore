@@ -25,6 +25,10 @@ playwright-report/
 
 # Local research notes and generated release packages
 /docs/
+!/docs/
+/docs/*
+!/docs/2.6.2-长时间运行故障分析与修复记录.md
+!/docs/2.6.2-故障修复交接文档.md
 *.zip
 /dist/
 /native/target/

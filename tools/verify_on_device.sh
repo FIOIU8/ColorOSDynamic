@@ -59,11 +59,14 @@ expect() {
 }
 line() { printf '         %s 1000 1000 I %s\n' "$(date +%s.%3N)" "$1" >&6; }
 tap() { printf 'PASS %s\n' "$*"; }
+activity_queries() { awk '/^activity/ { n++ } END { print n + 0 }' queries; }
 native_pids() {
     for dir in /proc/[0-9]*; do
         [ -r "$dir/cmdline" ] || continue
-        case "$(tr '\0' ' ' < "$dir/cmdline" 2>/dev/null)" in
-            *touch-listener*) printf '%s\n' "${dir#/proc/}" ;;
+        # Match the executable argument only; outer test shells may also contain
+        # the path in their command line.
+        case "$(tr '\0' '\n' < "$dir/cmdline" 2>/dev/null | head -n 1)" in
+            */touch-listener) printf '%s\n' "${dir#/proc/}" ;;
         esac
     done
 }
@@ -138,8 +141,16 @@ if [ "${TOUCH_TEST_ORPHAN:-0}" = 1 ]; then
     tap 'Native listener exits with its wrapper and restarts as one process'
     exit 0
 fi
+printf 'com.tencent.tmgp.sgame\n' > foreground
+: > queries
 line 'wm_set_resumed_activity: [0,com.tencent.tmgp.sgame/.Main,resume]'
 expect rate=360
+n=0
+while [ "$(activity_queries)" -lt 1 ] && [ "$n" -lt 25 ]; do sleep .1; n=$((n + 1)); done
+sleep .5
+[ "$(activity_queries)" -eq 1 ] || fail app_confirmation_activity:$(activity_queries)
+[ "$(wc -l < touch_calls)" -eq 2 ] || fail app_confirmation_HAL
+tap 'Explicit app switch schedules one authoritative confirmation'
 line 'wm_set_resumed_activity: [0,com.tencent.tmgp.sgame/.Lobby,resume]'
 sleep .35
 [ "$(wc -l < touch_calls)" -eq 2 ] || fail duplicate_HAL
@@ -149,6 +160,20 @@ line 'wm_focused_root_task: [0,1,2,3,focusChanged]'
 sleep .35
 [ "$(wc -l < touch_calls)" -eq 2 ] || fail ambiguous_focus_applied_wrong_HAL
 expect foreground_package=com.tencent.tmgp.sgame
+sleep 2.2
+: > queries
+n=0
+while [ "$n" -lt 4 ]; do
+    line 'wm_focused_root_task: [0,1,2,3,focusChanged]'
+    sleep .25
+    n=$((n + 1))
+done
+sleep 2.5
+n=$(activity_queries)
+[ "$n" -ge 1 ] && [ "$n" -le 3 ] || fail focus_confirmation_not_coalesced:$n
+[ "$(wc -l < touch_calls)" -eq 2 ] || fail focus_confirmation_HAL
+expect foreground_package=com.tencent.tmgp.sgame
+tap 'Focus burst is coalesced into bounded confirmations'
 sed 's/com.tencent.tmgp.sgame=360/com.tencent.tmgp.sgame=240/' "${BASE}/module/touch_profile.conf" > changed
 printf 'com.tencent.tmgp.sgame\n' > foreground
 ctl save "$(base64 changed | tr -d '\n')"
@@ -173,6 +198,30 @@ line 'wm_set_resumed_activity: [0,com.tencent.tmgp.sgame/.Main,resume]'
 sleep "${TOUCH_TEST_IDLE_SECONDS:-0.4}"
 [ "$(wc -l < queries)" -eq "$before_queries" ] || fail paused_foreground_query
 [ "$(stat -c '%Y' "runtime/$session/status")" = "$published" ] || fail paused_status_rewritten
+sleep 5.5
+[ "$(wc -l < queries)" -eq "$before_queries" ] || fail paused_probe_foreground_query
+[ "$(stat -c '%Y' "runtime/$session/status")" = "$published" ] || fail paused_probe_status_rewritten
+before_activity=$(awk '/^activity/ { n++ } END { print n + 0 }' queries)
+IFS=' ' read -r old_listener old_listener_start < "runtime/$session/listener"
+kill -KILL "$old_listener"
+n=0
+new_listener=
+new_listener_start=
+while [ "$n" -lt 100 ]; do
+    new_listener=
+    new_listener_start=
+    if [ -r "runtime/$session/listener" ] &&
+        IFS=' ' read -r new_listener new_listener_start < "runtime/$session/listener" &&
+        { [ "$new_listener" != "$old_listener" ] || [ "$new_listener_start" != "$old_listener_start" ]; }; then
+        break
+    fi
+    sleep .15
+    n=$((n + 1))
+done
+{ [ -n "$new_listener" ] && { [ "$new_listener" != "$old_listener" ] || [ "$new_listener_start" != "$old_listener_start" ]; }; } || fail listener_not_restarted_without_resync
+expect state=paused
+[ "$(awk '/^activity/ { n++ } END { print n + 0 }' queries)" -eq "$before_activity" ] || fail restart_foreground_query
+tap 'Silent listener death while paused is detected and restarted without resync'
 ctl resync
 sleep .25
 expect state=paused
@@ -185,9 +234,19 @@ IFS=' ' read -r logger token < "runtime/$session/logger"
 kill -KILL "$logger"
 expect state=running
 expect rate=240
-sleep 1.5
-IFS=' ' read -r new_logger token < "runtime/$session/logger"
-[ "$logger" != "$new_logger" ] || fail logcat_not_restarted
+n=0
+new_logger=
+while [ "$n" -lt 100 ]; do
+    new_logger=
+    if [ -r "runtime/$session/logger" ] &&
+        IFS=' ' read -r new_logger token < "runtime/$session/logger" &&
+        [ "$logger" != "$new_logger" ]; then
+        break
+    fi
+    sleep .15
+    n=$((n + 1))
+done
+[ -n "$new_logger" ] && [ "$logger" != "$new_logger" ] || fail logcat_not_restarted
 expect "pid=$pid"
 ctl disable
 expect enabled=0

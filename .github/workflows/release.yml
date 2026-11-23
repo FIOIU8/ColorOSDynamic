@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Check module scripts
         run: |
@@ -55,12 +56,24 @@ jobs:
             exit 1
           fi
 
-          notes=$(printf '%s\n\n%s\n\n%s' \
+          previous_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$GITHUB_SHA^" 2>/dev/null || true)
+          if [[ -n $previous_tag ]]; then
+            commits=$(git log --date=short --format='- %h (%ad) %s' "$previous_tag..$GITHUB_SHA" |
+              sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          else
+            commits=$(git log -10 --date=short --format='- %h (%ad) %s' "$GITHUB_SHA" |
+              sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          fi
+          [[ -n $commits ]] || commits='- No commit records found.'
+
+          notes=$(printf '%s\n\n%s\n\n%s\n\n%s\n\n<pre>\n%s\n</pre>' \
             '**正式版**：模块会调用厂商触控 HAL 指令并修改系统运行状态，升级前请先备份当前可用版本。' \
             '作者：FIOIU8' \
-            "Install \`$(basename "$SHELL_ASSET")\` for the Shell backend, or \`$(basename "$RUST_ASSET")\` for the Rust backend (arm64-v8a only). The two packages are independent; install only one.")
+            "Install \`$(basename "$SHELL_ASSET")\` for the Shell backend, or \`$(basename "$RUST_ASSET")\` for the Rust backend (arm64-v8a only). The two packages are independent; install only one." \
+            '## Git commits' "$commits")
           release_url=$(gh release create "$TAG" "$SHELL_ASSET" "$RUST_ASSET" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
             --title "ColorOSDynamic $TAG（正式版）" \
             --notes "$notes")
-          printf 'Draft release: %s\n\nShell: \`%s\`\nRust: \`%s\`\n' "$release_url" "$(basename "$SHELL_ASSET")" "$(basename "$RUST_ASSET")" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Draft release: %s\n\nShell: `%s`\nRust: `%s`\n\n### Git commits\n\n<pre>\n%s\n</pre>\n' \
+            "$release_url" "$(basename "$SHELL_ASSET")" "$(basename "$RUST_ASSET")" "$commits" >> "$GITHUB_STEP_SUMMARY"
