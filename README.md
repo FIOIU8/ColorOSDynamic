@@ -1,6 +1,6 @@
-# ColorOS 触控采样率优化
+# ColorOS Touch
 
-[![Release](https://img.shields.io/github/v/release/FIOIU8/ColorOSDynamic?label=release)](https://github.com/FIOIU8/ColorOSDynamic/releases)
+[![Release](https://img.shields.io/github/v/release/FIOIU8/ColorOSTouch?label=release)](https://github.com/FIOIU8/ColorOSTouch/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 按前台应用自动切换 ColorOS 触控采样率档位的 KernelSU / Magisk 模块。模块默认关闭，安装后可在支持 WebUI 的模块管理器中启用。
@@ -18,12 +18,12 @@
 
 ## 两个安装包
 
-从 [Releases](https://github.com/FIOIU8/ColorOSDynamic/releases) 下载并**只安装其中一个**：
+从 [Releases](https://github.com/FIOIU8/ColorOSTouch/releases) 下载并**只安装其中一个**：
 
 | 安装包 | 后端 | 说明 |
 | --- | --- | --- |
-| `ColorOSDynamic-vX.Y.Z-shell.zip` | Shell | 不含 Rust 二进制，固定使用 Shell 事件监听，建议日常使用。 |
-| `ColorOSDynamic-vX.Y.Z-rust-arm64.zip` | Rust | 包含 Rust 监听器，固定使用 Rust 后端，仅支持 `arm64-v8a`。 |
+| `ColorOSTouch-vX.Y.Z-shell.zip` | Shell | 不含 Rust 二进制，固定使用 Shell 事件监听，建议日常使用。 |
+| `ColorOSTouch-vX.Y.Z-rust-arm64.zip` | Rust | 包含 Rust 监听器，固定使用 Rust 后端，仅支持 `arm64-v8a`。 |
 
 两个包各自包含完整的模块文件和配置逻辑，不需要叠加安装，也不要在升级时混装。Rust 版启动失败时不会回退 Shell，原因会显示在 WebUI「诊断」页并持续重试。
 
@@ -43,7 +43,7 @@
 
 ## 安装
 
-1. 从 [Releases](https://github.com/FIOIU8/ColorOSDynamic/releases) 下载对应安装包。
+1. 从 [Releases](https://github.com/FIOIU8/ColorOSTouch/releases) 下载对应安装包。
 2. 在 KernelSU / Magisk 管理器中安装 ZIP 并重启。
 3. 打开模块 WebUI，在概览页启用模块。
 4. 在「规则」页添加应用与目标档位。
@@ -51,6 +51,8 @@
 ### 升级
 
 直接在管理器中安装同版本类型的新 ZIP，开关、规则、映射和应用名称会保留。旧观察器模式会自动迁移为名单轮询。从 Shell 版换到 Rust 版（或反向）前，建议先备份配置；安装另一种版本时应先卸载旧包再安装，避免两个包混装。
+
+从 1.0.1 升级到 1.1.0 时，安装器会迁移配置，并把旧的 `ColorOSDynamic` 模块标记为停用和移除；重启后只保留 `ColorOSTouch` 模块，请勿再操作旧模块。旧的运行时目录 `/data/adb/ColorOSDynamic` 不再使用，确认升级正常后可手动删除。
 
 ### 卸载
 
@@ -112,8 +114,8 @@ adb shell "cd /data/local/tmp/coloros-measure.XXXX && /system/bin/sh measure_lis
 1. 更新 `module/module.prop` 中的 `version` 与 `versionCode`。
 2. 在 Actions 手动运行 **Draft module release**。
 3. 检查工作流生成的两个 ZIP：
-   - `ColorOSDynamic-vX.Y.Z-shell.zip`
-   - `ColorOSDynamic-vX.Y.Z-rust-arm64.zip`
+   - `ColorOSTouch-vX.Y.Z-shell.zip`
+   - `ColorOSTouch-vX.Y.Z-rust-arm64.zip`
 4. 发布草稿。
 
 工作流会先运行脚本语法检查、Node 测试和 cargo fmt/clippy/test，再构建 arm64 Rust 监听器并创建草稿 Release。
@@ -126,7 +128,7 @@ adb shell "cd /data/local/tmp/coloros-measure.XXXX && /system/bin/sh measure_lis
 
 ## 反馈
 
-请通过 [GitHub Issues](https://github.com/FIOIU8/ColorOSDynamic/issues) 反馈问题，并附上设备型号、ColorOS 版本、安装包类型（Shell / Rust）、复现步骤和诊断页日志。
+请通过 [GitHub Issues](https://github.com/FIOIU8/ColorOSTouch/issues) 反馈问题，并附上设备型号、ColorOS 版本、安装包类型（Shell / Rust）、复现步骤和诊断页日志。
 
 ## 作者与许可证
 

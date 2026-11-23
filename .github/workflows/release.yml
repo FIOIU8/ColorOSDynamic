@@ -73,7 +73,7 @@ jobs:
             '## Git commits' "$commits")
           release_url=$(gh release create "$TAG" "$SHELL_ASSET" "$RUST_ASSET" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
-            --title "ColorOSDynamic $TAG（正式版）" \
+            --title "ColorOS Touch $TAG（正式版）" \
             --notes "$notes")
           printf 'Draft release: %s\n\nShell: `%s`\nRust: `%s`\n\n### Git commits\n\n<pre>\n%s\n</pre>\n' \
             "$release_url" "$(basename "$SHELL_ASSET")" "$(basename "$RUST_ASSET")" "$commits" >> "$GITHUB_STEP_SUMMARY"

@@ -5,7 +5,7 @@ umask 077
 MODDIR=${0%/*}
 [ "$MODDIR" != "$0" ] || MODDIR=.
 MODDIR=$(CDPATH= cd -- "$MODDIR" && pwd) || exit 1
-RUN=${COLOROS_RUNTIME_DIR:-/data/adb/ColorOSDynamic}
+RUN=${COLOROS_RUNTIME_DIR:-/data/adb/ColorOSTouch}
 SH=${COLOROS_SHELL:-/system/bin/sh}
 CONFIG="$MODDIR/touch_profile.conf"
 FLAG="$MODDIR/touch_enabled.flag"
@@ -66,8 +66,8 @@ module_description() {
     local ksud
     ksud=$(command -v ksud) || ksud=/data/adb/ksud
     [ -x "$ksud" ] || return 0
-    KSU_MODULE=ColorOSDynamic limited "$ksud" module config set --temp override.description \
-        "ColorOS 触控 · $1" >/dev/null 2>&1 || true
+    KSU_MODULE=ColorOSTouch limited "$ksud" module config set --temp override.description \
+        "ColorOS Touch · $1" >/dev/null 2>&1 || true
 }
 log_message() {
     # Bound the root-only event log. No per-heartbeat logging.

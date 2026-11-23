@@ -64,7 +64,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = { parseFie
 if (typeof document !== 'undefined') (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const path = '/data/adb/modules/ColorOSDynamic/service.sh';
+  const path = '/data/adb/modules/ColorOSTouch/service.sh';
   const manager = window.ksu || window.magisk;
   const preview = !manager?.exec;
   const packagePattern = /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/;

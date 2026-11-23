@@ -81,11 +81,11 @@ def main():
         parser.error("module.prop needs a version and positive versionCode")
     version = version[1]
     shell_items = {**items, "edition.conf": b"edition=shell\n"}
-    assets = [(f"ColorOSDynamic-v{version}-shell.zip", shell_items)]
+    assets = [(f"ColorOSTouch-v{version}-shell.zip", shell_items)]
     if args.rust:
         native = verify_arm64(args.rust)
         rust_items = {**shell_items, "bin/touch-listener": native, "edition.conf": b"edition=rust\n"}
-        assets.append((f"ColorOSDynamic-v{version}-rust-arm64.zip", rust_items))
+        assets.append((f"ColorOSTouch-v{version}-rust-arm64.zip", rust_items))
     output_dir = args.output or args.dist
     output_dir.mkdir(parents=True, exist_ok=True)
     created = []

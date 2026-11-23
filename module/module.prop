@@ -1,8 +1,8 @@
-id=ColorOSDynamic
-name=ColorOS 触控采样率优化
-version=1.0.1
-versionCode=2
+id=ColorOSTouch
+name=ColorOS Touch
+version=1.1.0
+versionCode=3
 author=FIOIU8
 description=正式版 · 按应用调整触控采样率 · 事件监听与息屏暂停 · 默认关闭
-homepage=https://github.com/FIOIU8/ColorOSDynamic
-support=https://github.com/FIOIU8/ColorOSDynamic/issues
+homepage=https://github.com/FIOIU8/ColorOSTouch
+support=https://github.com/FIOIU8/ColorOSTouch/issues
